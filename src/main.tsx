@@ -22,8 +22,8 @@ function App() {
 
   return (
     <Layout page={page} onPage={setPage}>
-      {page === "dashboard" && <Dashboard onImport={() => setPage("import")} />}
-      {page === "trends" && <Trends />}
+      {page === "dashboard" && <Dashboard onNavigate={setPage} />}
+      {page === "trends" && <Trends onNavigate={setPage} />}
       {page === "transactions" && <Transactions />}
       {page === "import" && <ImportPage onImported={() => setPage("transactions")} />}
       {page === "categories" && <Categories />}

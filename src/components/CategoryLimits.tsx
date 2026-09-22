@@ -19,18 +19,16 @@ export function CategoryLimits({
   return (
     <article className="card limit-card">
       <div className="card-head">
-        <h2>Limity kategorii</h2>
-        {over.length ? (
-          <p className="limit-over-count">{over.length} ponad limit</p>
-        ) : (
-          <p className="muted">Limit miesięczny</p>
-        )}
+        <div>
+          <h2>Limity kategorii</h2>
+          <p className="card-sub">
+            {scaled
+              ? `Limit miesięczny × ${months.toLocaleString("pl-PL", { maximumFractionDigits: 1 })} (długość okresu)`
+              : "Wydatki w tym okresie względem limitu miesięcznego"}
+          </p>
+        </div>
+        {over.length ? <span className="pill over">{over.length} ponad limit</span> : null}
       </div>
-      <p className="muted chart-hint">
-        {scaled
-          ? `W tym widoku limit jest × ${months.toLocaleString("pl-PL", { maximumFractionDigits: 1 })} względem miesiąca.`
-          : "Słupek porównuje wydatki w tym okresie z limitem. Kliknij kategorię, żeby zobaczyć płatności."}
-      </p>
       {!items.length ? (
         <p className="muted">Ustaw limit zł / miesiąc przy kategoriach — potem tu widać, czy został przekroczony.</p>
       ) : (
@@ -46,6 +44,7 @@ export function CategoryLimits({
                       ? `limit-row selected ${row.status}`
                       : `limit-row ${row.status}`
                   }
+                  aria-pressed={picked.includes(row.category)}
                   onClick={(event) => onSelect?.(row.category, event.ctrlKey || event.metaKey)}
                 >
                   <span className="limit-dot" style={{ background: categoryColor(row.category) }} />

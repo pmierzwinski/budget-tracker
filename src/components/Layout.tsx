@@ -1,15 +1,26 @@
 import type { ReactNode } from "react";
+import { Icon, type IconName } from "./Icon";
 
-const links = [
-  { id: "dashboard", label: "Przegląd" },
-  { id: "trends", label: "Miesiąc do miesiąca" },
-  { id: "transactions", label: "Płatności" },
-  { id: "import", label: "Import" },
-  { id: "categories", label: "Kategorie" },
-  { id: "bank", label: "Bank PKO" },
-] as const;
+const groups = [
+  {
+    label: "Analiza",
+    links: [
+      { id: "dashboard", label: "Przegląd", icon: "dashboard" },
+      { id: "trends", label: "Miesiąc do miesiąca", icon: "trends" },
+      { id: "transactions", label: "Płatności", icon: "list" },
+    ],
+  },
+  {
+    label: "Dane",
+    links: [
+      { id: "import", label: "Import", icon: "upload" },
+      { id: "categories", label: "Kategorie", icon: "tag" },
+      { id: "bank", label: "Bank PKO", icon: "bank" },
+    ],
+  },
+] as const satisfies readonly { label: string; links: readonly { id: string; label: string; icon: IconName }[] }[];
 
-export type Page = (typeof links)[number]["id"];
+export type Page = (typeof groups)[number]["links"][number]["id"];
 
 export function Layout({
   page,
@@ -32,15 +43,24 @@ export function Layout({
             <p>Historia z PKO</p>
           </div>
         </div>
-        <nav>
-          {links.map((link) => (
-            <button
-              key={link.id}
-              className={page === link.id ? "nav-btn active" : "nav-btn"}
-              onClick={() => onPage(link.id)}
-            >
-              {link.label}
-            </button>
+        <nav className="nav">
+          {groups.map((group) => (
+            <div key={group.label} className="nav-group">
+              <p className="nav-label">{group.label}</p>
+              {group.links.map((link) => (
+                <button
+                  key={link.id}
+                  type="button"
+                  className={page === link.id ? "nav-btn active" : "nav-btn"}
+                  aria-current={page === link.id ? "page" : undefined}
+                  title={link.label}
+                  onClick={() => onPage(link.id)}
+                >
+                  <Icon name={link.icon} />
+                  <span>{link.label}</span>
+                </button>
+              ))}
+            </div>
           ))}
         </nav>
         <p className="sidebar-note">

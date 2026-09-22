@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { AiEvaluationCard } from "../components/AiEvaluationCard";
-import { AmountColumns, Bars, CategoryColumns, Donut, WeekdayBars } from "../components/Charts";
+import { AiEvaluation } from "../components/AiEvaluationCard";
+import { AmountBars, CategoryBars, Donut, MonthBars, WeekdayBars } from "../components/Charts";
 import { CategoryLimits } from "../components/CategoryLimits";
+import { Icon } from "../components/Icon";
+import type { Page } from "../components/Layout";
 import { PaymentPanel, type PaySort } from "../components/PaymentPanel";
-import { PeriodBar, applyPreset, type Period } from "../components/PeriodBar";
-import { AMOUNT_BUCKET_QUERY, money } from "../format";
+import { PeriodBar, allPeriod, latestMonthPeriod, type Period } from "../components/PeriodBar";
+import { AMOUNT_BUCKET_QUERY, describePeriod, money, percent, previousComparable } from "../format";
 import type { Stats, Transaction } from "../types";
 
 function withCategory(names: string[], next: string) {
@@ -13,10 +15,35 @@ function withCategory(names: string[], next: string) {
   return [...names.filter((name) => name !== "Inne"), next, "Inne"];
 }
 
-export function Dashboard({ onImport }: { onImport: () => void }) {
+function spendOf(stats: Stats, categories: string[]): number {
+  if (!categories.length) return stats.expenses;
+  return -stats.byCategory
+    .filter((slice) => categories.includes(slice.category))
+    .reduce((sum, slice) => sum + slice.amount, 0);
+}
+
+function Delta({ current, previous, label }: { current: number; previous: number; label: string }) {
+  if (!previous) return null;
+  const diff = current - previous;
+  const flat = Math.abs(diff / previous) < 0.005;
+  const direction = flat ? "" : diff > 0 ? " up" : " down";
+  return (
+    <p
+      className={`hero-delta${direction}`}
+      title={`${label}: ${money(previous)} · różnica ${diff > 0 ? "+" : ""}${money(diff)}`}
+    >
+      <span aria-hidden>{flat ? "=" : diff > 0 ? "▲" : "▼"}</span>
+      {flat ? "tyle samo" : `${diff > 0 ? "+" : "−"}${percent(Math.abs(diff), previous)}`}
+      <span className="muted"> vs {label}</span>
+    </p>
+  );
+}
+
+export function Dashboard({ onNavigate }: { onNavigate: (page: Page) => void }) {
   const [period, setPeriod] = useState<Period>({ from: "", to: "" });
   const [bounds, setBounds] = useState({ minDate: "", maxDate: "" });
   const [stats, setStats] = useState<Stats | null>(null);
+  const [previous, setPrevious] = useState<{ key: string; stats: Stats } | null>(null);
   const [items, setItems] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [sort, setSort] = useState<PaySort>("amount_desc");
@@ -25,46 +52,78 @@ export function Dashboard({ onImport }: { onImport: () => void }) {
   const [chartType, setChartType] = useState<"bars" | "pie">("bars");
   const [error, setError] = useState("");
 
+  const info = describePeriod(period, bounds.minDate, bounds.maxDate);
+  const comparison = info.kind === "all" ? null : previousComparable(period, bounds.maxDate);
+  const comparisonKey = comparison ? `${comparison.period.from}|${comparison.period.to}` : "";
+
   useEffect(() => {
     api
       .meta()
       .then((meta) => {
         setBounds({ minDate: meta.minDate, maxDate: meta.maxDate });
-        setPeriod((current) =>
-          current.from ? current : applyPreset("month", meta.minDate, meta.maxDate),
-        );
+        setPeriod((current) => (current.from ? current : latestMonthPeriod(meta.maxDate)));
       })
       .catch((err: Error) => setError(err.message));
   }, []);
 
   useEffect(() => {
     if (!period.from && !period.to) return;
-    const bucket = amountBucket ? AMOUNT_BUCKET_QUERY[amountBucket] : {};
-    Promise.all([
-      api.stats(period),
-      api.transactions({
-        ...period,
-        sort,
-        kind: amountBucket ? "expense" : "all",
-        category: categoryFilter.length ? categoryFilter.join(",") : undefined,
-        ...bucket,
-      }),
-    ])
-      .then(([nextStats, data]) => {
-        setStats(nextStats);
+    let alive = true;
+    api
+      .stats(period)
+      .then((next) => alive && setStats(next))
+      .catch((err: Error) => alive && setError(err.message));
+    return () => {
+      alive = false;
+    };
+  }, [period.from, period.to]);
+
+  useEffect(() => {
+    if (!comparisonKey) return;
+    const [from, to] = comparisonKey.split("|");
+    let alive = true;
+    api
+      .stats({ from, to })
+      .then((next) => alive && setPrevious({ key: comparisonKey, stats: next }))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [comparisonKey]);
+
+  function transactionQuery() {
+    return {
+      ...period,
+      sort,
+      kind: amountBucket ? ("expense" as const) : ("all" as const),
+      category: categoryFilter.length ? categoryFilter.join(",") : undefined,
+      ...(amountBucket ? AMOUNT_BUCKET_QUERY[amountBucket] : {}),
+    };
+  }
+
+  async function reloadItems() {
+    const data = await api.transactions(transactionQuery());
+    setItems(data.items);
+    setCategories(data.categories);
+  }
+
+  useEffect(() => {
+    if (!period.from && !period.to) return;
+    let alive = true;
+    api
+      .transactions(transactionQuery())
+      .then((data) => {
+        if (!alive) return;
         setItems(data.items);
         setCategories(data.categories);
       })
-      .catch((err: Error) => setError(err.message));
+      .catch((err: Error) => alive && setError(err.message));
+    return () => {
+      alive = false;
+    };
   }, [period.from, period.to, sort, categoryFilter, amountBucket]);
 
-  if (error) return <p className="banner error">{error}</p>;
-  if (!stats) return <p className="muted">Ładowanie…</p>;
-
-  const selectedSlices = categoryFilter.length
-    ? stats.byCategory.filter((slice) => categoryFilter.includes(slice.category))
-    : [];
-  const selectedNet = selectedSlices.reduce((sum, slice) => sum + slice.amount, 0);
+  if (!stats) return error ? <p className="banner error">{error}</p> : <p className="muted loading">Ładowanie…</p>;
 
   function pickCategory(category: string, additive: boolean) {
     setCategoryFilter((current) => {
@@ -77,237 +136,270 @@ export function Dashboard({ onImport }: { onImport: () => void }) {
       return [category];
     });
   }
+
   const expenseCategories = stats.byCategory.filter((slice) => slice.amount < 0);
+  const expenseNames = expenseCategories.map((slice) => slice.category);
   const emptyAll = stats.totalAll === 0;
   const emptyPeriod = stats.count === 0;
+  const filtering = categoryFilter.length > 0;
+  const heroValue = spendOf(stats, categoryFilter);
+  const previousStats = previous && previous.key === comparisonKey ? previous.stats : null;
+  const listFiltered = filtering || Boolean(amountBucket);
 
-  return (
-    <section>
-      <header className="page-head">
-        <div>
-          <p className="eyebrow">Analiza wydatków</p>
-          <h1>Przegląd</h1>
-        </div>
-        <p className="muted">{stats.count} operacji w okresie</p>
-      </header>
-
+  const header = (
+    <>
       <PeriodBar
+        page="Przegląd"
         period={period}
         minDate={bounds.minDate}
         maxDate={bounds.maxDate}
-        onChange={(next) => {
-          setCategoryFilter([]);
-          setAmountBucket("");
-          setPeriod(next);
-        }}
+        onChange={setPeriod}
       />
+      {error ? (
+        <p className="banner error dismissible">
+          {error}
+          <button type="button" className="icon-btn" aria-label="Zamknij" onClick={() => setError("")}>
+            <Icon name="close" size={16} />
+          </button>
+        </p>
+      ) : null}
+    </>
+  );
 
-      {emptyAll ? null : (
-        <AiEvaluationCard
-          period={period}
-          disabled={emptyPeriod}
-          filters={{
-            category: categoryFilter.length ? categoryFilter.join(",") : undefined,
-            kind: amountBucket ? "expense" : undefined,
-            ...(amountBucket ? AMOUNT_BUCKET_QUERY[amountBucket] : {}),
-          }}
-        />
-      )}
-
-      {emptyAll ? (
+  if (emptyAll) {
+    return (
+      <section className="page">
+        {header}
         <div className="empty-card">
           <h2>Brak zaimportowanych danych</h2>
-          <p>Wgraj CSV z iPKO albo połącz konto przez Open Banking.</p>
-          <button className="primary" onClick={onImport}>
-            Importuj historię
-          </button>
+          <p>Wgraj CSV z iPKO albo połącz konto przez Open Banking — wykresy pojawią się od razu.</p>
+          <div className="row">
+            <button type="button" className="primary" onClick={() => onNavigate("import")}>
+              Importuj historię
+            </button>
+            <button type="button" className="ghost" onClick={() => onNavigate("bank")}>
+              Połącz z PKO
+            </button>
+          </div>
         </div>
-      ) : emptyPeriod ? (
+      </section>
+    );
+  }
+
+  if (emptyPeriod) {
+    return (
+      <section className="page">
+        {header}
         <div className="empty-card">
           <h2>Brak transakcji w tym okresie</h2>
-          <p>
-            W bazie jest {stats.totalAll} operacji. Zmień zakres dat albo wybierz „Cały okres”.
-          </p>
+          <p>W bazie jest {stats.totalAll} operacji — wybierz okres, w którym coś się działo.</p>
+          <div className="row">
+            <button type="button" className="primary" onClick={() => setPeriod(latestMonthPeriod(bounds.maxDate))}>
+              Ostatni miesiąc z danymi
+            </button>
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => setPeriod(allPeriod(bounds.minDate, bounds.maxDate))}
+            >
+              Cały okres
+            </button>
+          </div>
         </div>
-      ) : (
-        <>
-          <div className="kpis">
-            <article className="kpi">
-              <span>{categoryFilter.length ? "Suma kategorii" : "Wydatki"}</span>
-              <strong
-                className={
-                  categoryFilter.length ? (selectedNet >= 0 ? "pos" : "neg") : undefined
-                }
-              >
-                {money(categoryFilter.length ? selectedNet : stats.expenses)}
-              </strong>
-            </article>
-            <article className="kpi income">
-              <span>Przychody</span>
-              <strong>{money(stats.income)}</strong>
-            </article>
-            <article className="kpi">
-              <span>Na plus / minus</span>
-              <strong className={(categoryFilter.length ? selectedNet : stats.net) >= 0 ? "pos" : "neg"}>
-                {money(categoryFilter.length ? selectedNet : stats.net)}
-              </strong>
-            </article>
-            <article className="kpi">
-              <span>Transakcje</span>
-              <strong>{categoryFilter.length ? items.length : stats.count}</strong>
-            </article>
-          </div>
+      </section>
+    );
+  }
 
-          <CategoryLimits
-            items={stats.limits || []}
-            months={stats.limitMonths || 1}
-            selected={categoryFilter}
-            onSelect={pickCategory}
-          />
-
-          <div className="overview">
-            <div className="stack">
-              <article className="card">
-                <div className="card-head">
-                  <h2>Wydatki według kategorii</h2>
-                  <div className="chart-toggle">
-                    <button
-                      type="button"
-                      className={chartType === "bars" ? "active" : undefined}
-                      onClick={() => setChartType("bars")}
-                    >
-                      Kolumny
+  return (
+    <section className="page dash">
+      {header}
+      <div className="dash-grid">
+        <div className="dash-main">
+          <article className="card hero">
+            <div className="hero-summary">
+              <div className="hero-kpi">
+                <div className="hero-label">
+                  <span>
+                    {filtering
+                      ? categoryFilter.length === 1
+                        ? categoryFilter[0]
+                        : `${categoryFilter.length} kategorie`
+                      : "Wydatki"}
+                  </span>
+                  {filtering ? (
+                    <button type="button" className="link-btn quiet" onClick={() => setCategoryFilter([])}>
+                      <Icon name="close" size={13} />
+                      wszystkie
                     </button>
-                    <button
-                      type="button"
-                      className={chartType === "pie" ? "active" : undefined}
-                      onClick={() => setChartType("pie")}
-                    >
-                      Kołowy
-                    </button>
-                  </div>
+                  ) : null}
                 </div>
-                <p className="muted chart-hint">
-                  {chartType === "pie"
-                    ? "Udział w wydatkach. Ctrl+klik dodaje kolejną kategorię — suma u góry się aktualizuje."
-                    : "Kliknij słupek. Ctrl+klik dodaje kolejne kategorie i sumuje je w kafelku u góry."}
-                </p>
-                {expenseCategories.length ? (
-                  chartType === "pie" ? (
-                    <Donut slices={expenseCategories} selected={categoryFilter} onSelect={pickCategory} />
-                  ) : (
-                    <CategoryColumns
-                      compact
-                      slices={expenseCategories}
-                      selected={categoryFilter}
-                      limits={stats.limits}
-                      onSelect={pickCategory}
-                    />
-                  )
-                ) : (
-                  <p className="muted">Brak wydatków w tym okresie.</p>
-                )}
-              </article>
-              <article className="card">
-                <h2>Miesiące w wybranym okresie</h2>
-                <Bars months={stats.byMonth} />
-                <p className="muted bar-caption">
-                  <span className="dot income" /> przychody
-                  <span className="dot expense" /> wydatki
-                </p>
-              </article>
-              <article className="card">
-                <h2>Którego dnia schodzi kasa</h2>
-                <p className="muted chart-hint">
-                  Suma wydatków w tym okresie według dnia tygodnia — widać, czy dziura jest w piątki, czy w weekend.
-                </p>
-                {stats.byWeekday?.some((day) => day.amount) ? (
-                  <WeekdayBars days={stats.byWeekday} />
-                ) : (
-                  <p className="muted">Brak wydatków w tym okresie.</p>
-                )}
-              </article>
-              <article className="card">
-                <h2>Wydatki według kwoty</h2>
-                <p className="muted chart-hint">Kliknij kolumnę, żeby zobaczyć płatności w tym przedziale.</p>
-                {stats.byAmount.some((slice) => slice.count) ? (
-                  <AmountColumns
-                    slices={stats.byAmount}
-                    selected={amountBucket}
-                    onSelect={(id) => setAmountBucket((current) => (current === id ? "" : id))}
+                <strong className="hero-value">{money(heroValue)}</strong>
+                {filtering ? (
+                  <p className="hero-share">{percent(heroValue, spendOf(stats, expenseNames))} wydatków w kategoriach</p>
+                ) : null}
+                {previousStats && comparison ? (
+                  <Delta
+                    current={heroValue}
+                    previous={spendOf(previousStats, categoryFilter)}
+                    label={comparison.label}
                   />
-                ) : (
-                  <p className="muted">Brak wydatków w tym okresie.</p>
-                )}
-              </article>
+                ) : null}
+              </div>
+              <dl className="hero-stats">
+                <div>
+                  <dt>Przychody</dt>
+                  <dd className="pos">{money(stats.income)}</dd>
+                </div>
+                <div>
+                  <dt>Bilans</dt>
+                  <dd className={stats.net >= 0 ? "pos" : "neg"}>
+                    {stats.net > 0 ? "+" : ""}
+                    {money(stats.net)}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Transakcje</dt>
+                  <dd>{listFiltered ? `${items.length} z ${stats.count}` : stats.count}</dd>
+                </div>
+              </dl>
+              <AiEvaluation
+                period={period}
+                onSetup={() => onNavigate("categories")}
+                filters={{
+                  category: filtering ? categoryFilter.join(",") : undefined,
+                  kind: amountBucket ? "expense" : undefined,
+                  ...(amountBucket ? AMOUNT_BUCKET_QUERY[amountBucket] : {}),
+                }}
+              />
             </div>
-            <PaymentPanel
-              items={items}
-              sort={sort}
-              onSort={setSort}
-              categories={categories}
-              categoryFilter={categoryFilter}
-              onClearFilter={() => setCategoryFilter([])}
-              onRemoveCategory={(name) =>
-                setCategoryFilter((current) => current.filter((item) => item !== name))
-              }
-              amountFilter={stats.byAmount.find((slice) => slice.id === amountBucket)?.label}
-              onClearAmount={() => setAmountBucket("")}
-              onCategoryChange={async (item, next, scope) => {
-                setItems((current) =>
-                  current.map((row) => {
-                    if (row.id === item.id) return { ...row, category: next };
-                    if (
-                      scope === "merchant" &&
-                      item.payee &&
-                      row.payee.toLowerCase() === item.payee.toLowerCase()
-                    ) {
-                      return { ...row, category: next };
-                    }
-                    return row;
-                  }),
-                );
-                setCategories((current) => withCategory(current, next));
-                try {
-                  await api.updateCategory(item.id, next, { onlyThis: scope === "one" });
-                  setStats(await api.stats(period));
-                } catch (err) {
-                  setError(err instanceof Error ? err.message : "Nie zapisano kategorii");
-                  const bucket = amountBucket ? AMOUNT_BUCKET_QUERY[amountBucket] : {};
-                  const data = await api.transactions({
-                    ...period,
-                    sort,
-                    kind: amountBucket ? "expense" : "all",
-                    category: categoryFilter.length ? categoryFilter.join(",") : undefined,
-                    ...bucket,
-                  });
-                  setItems(data.items);
-                  setCategories(data.categories);
-                }
-              }}
-              onCommentChange={async (item, next) => {
-                setItems((current) =>
-                  current.map((row) => (row.id === item.id ? { ...row, comment: next } : row)),
-                );
-                try {
-                  await api.updateComment(item.id, next);
-                } catch (err) {
-                  setError(err instanceof Error ? err.message : "Nie zapisano komentarza");
-                  const bucket = amountBucket ? AMOUNT_BUCKET_QUERY[amountBucket] : {};
-                  const data = await api.transactions({
-                    ...period,
-                    sort,
-                    kind: amountBucket ? "expense" : "all",
-                    category: categoryFilter.length ? categoryFilter.join(",") : undefined,
-                    ...bucket,
-                  });
-                  setItems(data.items);
-                }
-              }}
-            />
+            <div className="hero-chart">
+              <div className="card-head">
+                <div>
+                  <h2>Wydatki według kategorii</h2>
+                  <p className="card-sub">Kliknij kategorię, żeby zobaczyć jej płatności · Ctrl+klik — kilka naraz</p>
+                </div>
+                <div className="segmented sm" role="group" aria-label="Typ wykresu">
+                  <button
+                    type="button"
+                    className={chartType === "bars" ? "active" : undefined}
+                    aria-pressed={chartType === "bars"}
+                    onClick={() => setChartType("bars")}
+                  >
+                    Słupki
+                  </button>
+                  <button
+                    type="button"
+                    className={chartType === "pie" ? "active" : undefined}
+                    aria-pressed={chartType === "pie"}
+                    onClick={() => setChartType("pie")}
+                  >
+                    Kołowy
+                  </button>
+                </div>
+              </div>
+              {!expenseCategories.length ? (
+                <p className="muted">Brak wydatków w tym okresie.</p>
+              ) : chartType === "pie" ? (
+                <Donut slices={expenseCategories} selected={categoryFilter} onSelect={pickCategory} />
+              ) : (
+                <CategoryBars
+                  slices={expenseCategories}
+                  selected={categoryFilter}
+                  limits={stats.limits}
+                  onSelect={pickCategory}
+                />
+              )}
+            </div>
+          </article>
+
+          <div className="mini-charts">
+            <article className="card mini-card">
+              <div className="card-head">
+                <h2>Dni tygodnia</h2>
+                <p className="card-sub">suma wydatków</p>
+              </div>
+              {stats.byWeekday?.some((day) => day.amount) ? (
+                <WeekdayBars days={stats.byWeekday} />
+              ) : (
+                <p className="muted">Brak wydatków.</p>
+              )}
+            </article>
+            <article className="card mini-card">
+              <div className="card-head">
+                <h2>Wielkość płatności</h2>
+                <p className="card-sub">kliknij, żeby filtrować</p>
+              </div>
+              {stats.byAmount.some((slice) => slice.count) ? (
+                <AmountBars
+                  slices={stats.byAmount}
+                  selected={amountBucket}
+                  onSelect={(id) => setAmountBucket((current) => (current === id ? "" : id))}
+                />
+              ) : (
+                <p className="muted">Brak wydatków.</p>
+              )}
+            </article>
+            {stats.byMonth.length > 1 ? (
+              <article className="card mini-card wide">
+                <div className="card-head">
+                  <h2>Miesiące</h2>
+                  <p className="card-sub">przychody i wydatki</p>
+                </div>
+                <MonthBars months={stats.byMonth} />
+              </article>
+            ) : null}
           </div>
-        </>
-      )}
+
+          {stats.limits?.length ? (
+            <CategoryLimits
+              items={stats.limits}
+              months={stats.limitMonths || 1}
+              selected={categoryFilter}
+              onSelect={pickCategory}
+            />
+          ) : null}
+        </div>
+
+        <PaymentPanel
+          items={items}
+          sort={sort}
+          onSort={setSort}
+          categories={categories}
+          categoryFilter={categoryFilter}
+          onClearFilter={() => setCategoryFilter([])}
+          onRemoveCategory={(name) => setCategoryFilter((current) => current.filter((item) => item !== name))}
+          amountFilter={stats.byAmount.find((slice) => slice.id === amountBucket)?.label}
+          onClearAmount={() => setAmountBucket("")}
+          onCategoryChange={async (item, next, scope) => {
+            setItems((current) =>
+              current.map((row) => {
+                if (row.id === item.id) return { ...row, category: next };
+                if (scope === "merchant" && item.payee && row.payee.toLowerCase() === item.payee.toLowerCase()) {
+                  return { ...row, category: next };
+                }
+                return row;
+              }),
+            );
+            setCategories((current) => withCategory(current, next));
+            try {
+              await api.updateCategory(item.id, next, { onlyThis: scope === "one" });
+              setStats(await api.stats(period));
+            } catch (err) {
+              setError(err instanceof Error ? err.message : "Nie zapisano kategorii");
+              await reloadItems();
+            }
+          }}
+          onCommentChange={async (item, next) => {
+            setItems((current) => current.map((row) => (row.id === item.id ? { ...row, comment: next } : row)));
+            try {
+              await api.updateComment(item.id, next);
+            } catch (err) {
+              setError(err instanceof Error ? err.message : "Nie zapisano komentarza");
+              await reloadItems();
+            }
+          }}
+        />
+      </div>
     </section>
   );
 }

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
-import { AiEvaluationCard } from "../components/AiEvaluationCard";
+import { AiEvaluation } from "../components/AiEvaluationCard";
 import { TrendLines } from "../components/Charts";
+import type { Page } from "../components/Layout";
 import { PeriodBar, allPeriod, type Period } from "../components/PeriodBar";
-import { money, monthLabel, percent, categoryColor } from "../format";
+import { MONTHS_SHORT, categoryColor, money, monthLabel, percent } from "../format";
 import type { Stats } from "../types";
 
 function clipYMax(values: number[]) {
@@ -13,7 +14,11 @@ function clipYMax(values: number[]) {
   return Math.max(sorted[index] * 1.08, 1);
 }
 
-export function Trends() {
+function columnLabel(month: string): string {
+  return `${MONTHS_SHORT[Number(month.slice(5, 7)) - 1]} ${month.slice(0, 4)}`;
+}
+
+export function Trends({ onNavigate }: { onNavigate: (page: Page) => void }) {
   const [period, setPeriod] = useState<Period>({ from: "", to: "" });
   const [bounds, setBounds] = useState({ minDate: "", maxDate: "" });
   const [stats, setStats] = useState<Stats | null>(null);
@@ -34,13 +39,18 @@ export function Trends() {
 
   useEffect(() => {
     if (!period.from && !period.to) return;
+    let alive = true;
     api
       .stats(period)
       .then((next) => {
+        if (!alive) return;
         setStats(next);
         setHidden(new Set());
       })
-      .catch((err: Error) => setError(err.message));
+      .catch((err: Error) => alive && setError(err.message));
+    return () => {
+      alive = false;
+    };
   }, [period.from, period.to]);
 
   const chart = useMemo(() => {
@@ -54,7 +64,7 @@ export function Trends() {
       category,
       values: months.map((month) => lookup.get(`${month}|${category}`) || 0),
     }));
-    return { months, series, totals };
+    return { months, series };
   }, [stats]);
 
   const visible = useMemo(
@@ -78,31 +88,26 @@ export function Trends() {
     });
   }
 
-  if (error) return <p className="banner error">{error}</p>;
-  if (!stats) return <p className="muted">Ładowanie…</p>;
+  if (!stats) return error ? <p className="banner error">{error}</p> : <p className="muted loading">Ładowanie…</p>;
 
-  const leftover = stats.byMonth.map((row) => ({
-    ...row,
-    net: row.income - row.expenses,
-  }));
+  const leftover = stats.byMonth.map((row) => ({ ...row, net: row.income - row.expenses }));
   const leftoverSum = leftover.reduce((sum, row) => sum + row.net, 0);
   const lastLeft = leftover[leftover.length - 1];
+  const average = leftover.length ? leftoverSum / leftover.length : 0;
+  const empty = !stats.byMonth.length && !chart.months.length;
 
   return (
-    <section>
-      <header className="page-head">
-        <div>
-          <p className="eyebrow">Porównanie</p>
-          <h1>Miesiąc do miesiąca</h1>
-        </div>
-        <p className="muted">Jak rosną wydatki w każdej kategorii</p>
-      </header>
+    <section className="page">
+      <PeriodBar
+        page="Miesiąc do miesiąca"
+        period={period}
+        minDate={bounds.minDate}
+        maxDate={bounds.maxDate}
+        onChange={setPeriod}
+      />
+      {error ? <p className="banner error">{error}</p> : null}
 
-      <PeriodBar period={period} minDate={bounds.minDate} maxDate={bounds.maxDate} onChange={setPeriod} />
-
-      {bounds.minDate ? <AiEvaluationCard period={period} disabled={!stats.byMonth.length && !chart.months.length} /> : null}
-
-      {!stats.byMonth.length && !chart.months.length ? (
+      {empty ? (
         <div className="empty-card">
           <h2>Brak wydatków w tym okresie</h2>
           <p>Zmień zakres dat albo zaimportuj historię.</p>
@@ -110,16 +115,20 @@ export function Trends() {
       ) : (
         <>
           {chart.months.length ? (
-            <article className="card">
+            <article className="card trend-card">
               <div className="card-head">
-                <h2>Wydatki kategorii w czasie</h2>
+                <div>
+                  <h2>Wydatki kategorii w czasie</h2>
+                  <p className="card-sub">
+                    Najedź na wykres, żeby zobaczyć kwoty · kliknij kategorię w legendzie, żeby zostawić tylko ją
+                  </p>
+                </div>
                 <div className="trend-tools">
-                  <label className="inline-check">
-                    <input
-                      type="checkbox"
-                      checked={clipOutliers}
-                      onChange={(e) => setClipOutliers(e.target.checked)}
-                    />
+                  <label
+                    className="inline-check"
+                    title="Duże jednorazowe kwoty spłaszczają resztę wykresu — oś zostaje przycięta do typowych wartości"
+                  >
+                    <input type="checkbox" checked={clipOutliers} onChange={(e) => setClipOutliers(e.target.checked)} />
                     Przytnij skrajne
                   </label>
                   <label className="ymax-field">
@@ -132,17 +141,12 @@ export function Trends() {
                     />
                   </label>
                   {hidden.size ? (
-                    <button type="button" className="ghost" onClick={() => setHidden(new Set())}>
+                    <button type="button" className="ghost sm" onClick={() => setHidden(new Set())}>
                       Pokaż wszystkie
                     </button>
                   ) : null}
                 </div>
               </div>
-              <p className="muted chart-hint">
-                Duże jednorazowe kwoty spłaszczają resztę wykresu. „Przytnij skrajne” obcina oś do typowych
-                wartości. Albo wpisz ręczny limit. Kategoria <strong>Poza statystykami</strong> nie wchodzi do
-                tego wykresu.
-              </p>
               <TrendLines
                 months={chart.months}
                 series={chart.series}
@@ -153,104 +157,110 @@ export function Trends() {
             </article>
           ) : null}
 
+          {bounds.minDate ? (
+            <AiEvaluation variant="strip" period={period} disabled={empty} onSetup={() => onNavigate("categories")} />
+          ) : null}
+
           {leftover.length ? (
-            <article className="card" style={{ marginTop: chart.months.length ? "1rem" : 0 }}>
-              <h2>Ile zostaje</h2>
-              <p className="muted chart-hint">
-                Przychody minus wydatki w każdym miesiącu. Tu liczy się też to, co oznaczysz jako poza
-                statystykami — to nadal prawdziwe pieniądze.
-              </p>
-              <div className="kpis compact">
-                <article className="kpi">
-                  <span>Suma w okresie</span>
-                  <strong className={leftoverSum >= 0 ? "pos" : "neg"}>{money(leftoverSum)}</strong>
-                </article>
-                <article className="kpi">
-                  <span>Ostatni miesiąc</span>
-                  <strong className={(lastLeft?.net || 0) >= 0 ? "pos" : "neg"}>
-                    {lastLeft ? money(lastLeft.net) : "—"}
-                  </strong>
-                </article>
-                <article className="kpi">
-                  <span>Średnio na miesiąc</span>
-                  <strong className={leftoverSum / leftover.length >= 0 ? "pos" : "neg"}>
-                    {money(leftoverSum / leftover.length)}
-                  </strong>
-                </article>
+            <article className="card">
+              <div className="card-head">
+                <div>
+                  <h2>Ile zostaje</h2>
+                  <p className="card-sub">
+                    Przychody minus wydatki — tu liczy się też to, co jest poza statystykami
+                  </p>
+                </div>
               </div>
-              <div className="table-wrap">
-                <table>
+              <div className="leftover">
+                <dl className="stat-list">
+                  <div>
+                    <dt>Suma w okresie</dt>
+                    <dd className={leftoverSum >= 0 ? "pos" : "neg"}>{money(leftoverSum)}</dd>
+                  </div>
+                  <div>
+                    <dt>Średnio na miesiąc</dt>
+                    <dd className={average >= 0 ? "pos" : "neg"}>{money(average)}</dd>
+                  </div>
+                  <div>
+                    <dt>Ostatni miesiąc{lastLeft ? ` · ${monthLabel(lastLeft.month)}` : ""}</dt>
+                    <dd className={(lastLeft?.net || 0) >= 0 ? "pos" : "neg"}>{lastLeft ? money(lastLeft.net) : "—"}</dd>
+                  </div>
+                </dl>
+                <div className="table-wrap flat">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Miesiąc</th>
+                        <th className="num">Przychody</th>
+                        <th className="num">Wydatki</th>
+                        <th className="num">Zostaje</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {leftover.map((row) => (
+                        <tr key={row.month}>
+                          <td>{monthLabel(row.month)}</td>
+                          <td className="num">{money(row.income)}</td>
+                          <td className="num">{money(row.expenses)}</td>
+                          <td className={row.net >= 0 ? "num pos strong" : "num neg strong"}>{money(row.net)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </article>
+          ) : null}
+
+          {chart.months.length ? (
+            <article className="card">
+              <div className="card-head">
+                <div>
+                  <h2>Kwoty i zmiana do poprzedniego miesiąca</h2>
+                  <p className="card-sub">Czerwony procent — wydatki wzrosły, zielony — spadły</p>
+                </div>
+              </div>
+              <div className="table-wrap flat">
+                <table className="matrix">
                   <thead>
                     <tr>
-                      <th>Miesiąc</th>
-                      <th className="num">Przychody</th>
-                      <th className="num">Wydatki</th>
-                      <th className="num">Zostaje</th>
+                      <th className="sticky-col">Kategoria</th>
+                      {chart.months.map((month) => (
+                        <th key={month} className="num">
+                          {columnLabel(month)}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {leftover.map((row) => (
-                      <tr key={row.month}>
-                        <td>{monthLabel(row.month)}</td>
-                        <td className="num pos">{money(row.income)}</td>
-                        <td className="num neg">{money(row.expenses)}</td>
-                        <td className={row.net >= 0 ? "num pos" : "num neg"}>
-                          <strong>{money(row.net)}</strong>
+                    {visible.map((row) => (
+                      <tr key={row.category}>
+                        <td className="sticky-col">
+                          <button type="button" className="legend-btn" onClick={() => isolate(row.category)}>
+                            <span style={{ background: categoryColor(row.category) }} />
+                            {row.category}
+                          </button>
                         </td>
+                        {row.values.map((value, index) => {
+                          const prev = index > 0 ? row.values[index - 1] : 0;
+                          const delta = prev ? (value - prev) / prev : 0;
+                          return (
+                            <td key={chart.months[index]} className="num">
+                              <span className="cell-value">{value ? money(value) : "—"}</span>
+                              {index > 0 && prev ? (
+                                <span className={delta > 0 ? "cell-delta neg" : "cell-delta pos"}>
+                                  {`${delta > 0 ? "+" : ""}${percent(value - prev, prev)}`}
+                                </span>
+                              ) : null}
+                            </td>
+                          );
+                        })}
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             </article>
-          ) : null}
-
-          {chart.months.length ? (
-            <article className="card" style={{ marginTop: "1rem" }}>
-            <h2>Kwoty i zmiana do poprzedniego miesiąca</h2>
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Kategoria</th>
-                    {chart.months.map((month) => (
-                      <th key={month} className="num">
-                        {monthLabel(month)}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {visible.map((row) => (
-                    <tr key={row.category}>
-                      <td>
-                        <button type="button" className="legend-btn" onClick={() => isolate(row.category)}>
-                          <span style={{ background: categoryColor(row.category) }} />
-                          {row.category}
-                        </button>
-                      </td>
-                      {row.values.map((value, index) => {
-                        const prev = index > 0 ? row.values[index - 1] : 0;
-                        const delta = prev ? (value - prev) / prev : 0;
-                        return (
-                          <td key={chart.months[index]} className="num">
-                            <strong>{money(value)}</strong>
-                            {index > 0 && prev ? (
-                              <p className={delta >= 0 ? "muted neg" : "muted pos"}>
-                                {`${delta > 0 ? "+" : ""}${percent(value - prev, prev)}`}
-                              </p>
-                            ) : (
-                              <p className="muted">—</p>
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </article>
           ) : null}
         </>
       )}

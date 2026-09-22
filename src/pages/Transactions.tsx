@@ -2,22 +2,36 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { CategorySelect } from "../components/CategorySelect";
 import { CommentNote } from "../components/CommentNote";
+import { Icon } from "../components/Icon";
 import { PeriodBar, allPeriod, type Period } from "../components/PeriodBar";
-import { money } from "../format";
+import { formatDay, money } from "../format";
 import type { Transaction } from "../types";
 
 const OTHER = "Inne";
+const ALL = "Wszystkie";
+
+type Kind = "all" | "expense" | "income";
+type Sort = "date_desc" | "date_asc" | "amount_desc" | "amount_asc" | "category_asc" | "category_desc";
+
+const KINDS: { id: Kind; label: string }[] = [
+  { id: "all", label: "Wszystkie" },
+  { id: "expense", label: "Wydatki" },
+  { id: "income", label: "Przychody" },
+];
+
+function arrow(sort: Sort, field: "date" | "amount" | "category") {
+  if (!sort.startsWith(field)) return "";
+  return sort.endsWith("asc") ? " ↑" : " ↓";
+}
 
 export function Transactions() {
   const [period, setPeriod] = useState<Period>({ from: "", to: "" });
   const [bounds, setBounds] = useState({ minDate: "", maxDate: "" });
-  const [category, setCategory] = useState("Wszystkie");
-  const [kind, setKind] = useState<"all" | "expense" | "income">("all");
+  const [category, setCategory] = useState(ALL);
+  const [kind, setKind] = useState<Kind>("all");
   const [minAmount, setMinAmount] = useState("");
   const [maxAmount, setMaxAmount] = useState("");
-  const [sort, setSort] = useState<
-    "date_desc" | "date_asc" | "amount_desc" | "amount_asc" | "category_asc" | "category_desc"
-  >("date_desc");
+  const [sort, setSort] = useState<Sort>("date_desc");
   const [q, setQ] = useState("");
   const [items, setItems] = useState<Transaction[]>([]);
   const [matched, setMatched] = useState(0);
@@ -26,6 +40,8 @@ export function Transactions() {
   const [info, setInfo] = useState("");
   const [busyAi, setBusyAi] = useState(false);
   const [uncategorized, setUncategorized] = useState(0);
+
+  const filtered = Boolean(q || minAmount || maxAmount || kind !== "all" || category !== ALL);
 
   async function load(nextPeriod = period) {
     try {
@@ -52,20 +68,35 @@ export function Transactions() {
   useEffect(() => {
     api.meta().then((meta) => {
       setBounds({ minDate: meta.minDate, maxDate: meta.maxDate });
+      setUncategorized(meta.uncategorized || 0);
       setPeriod((current) => (current.from ? current : allPeriod(meta.minDate, meta.maxDate)));
     });
   }, []);
 
   useEffect(() => {
+    if (!period.from && !period.to) return;
     const timer = setTimeout(() => void load(), 150);
     return () => clearTimeout(timer);
   }, [period.from, period.to, category, q, minAmount, maxAmount, kind, sort]);
 
+  function toggleSort(field: "date" | "amount" | "category") {
+    const desc = `${field}_desc` as Sort;
+    const asc = `${field}_asc` as Sort;
+    const first = field === "category" ? asc : desc;
+    setSort(sort === first ? (first === asc ? desc : asc) : first);
+  }
+
+  function resetFilters() {
+    setQ("");
+    setKind("all");
+    setCategory(ALL);
+    setMinAmount("");
+    setMaxAmount("");
+  }
+
   async function changeComment(item: Transaction, next: string) {
     setError("");
-    setItems((current) =>
-      current.map((row) => (row.id === item.id ? { ...row, comment: next } : row)),
-    );
+    setItems((current) => current.map((row) => (row.id === item.id ? { ...row, comment: next } : row)));
     try {
       await api.updateComment(item.id, next);
     } catch (err) {
@@ -76,12 +107,12 @@ export function Transactions() {
 
   async function changeCategory(item: Transaction, next: string, scope: "one" | "merchant") {
     setError("");
-    setItems((current) =>
-      current.map((row) => (row.id === item.id ? { ...row, category: next } : row)),
-    );
+    setItems((current) => current.map((row) => (row.id === item.id ? { ...row, category: next } : row)));
     try {
       const result = await api.updateCategory(item.id, next, { onlyThis: scope === "one" });
-      setCategories((current) => (current.includes(next) ? current : [...current.filter((name) => name !== OTHER), next, OTHER]));
+      setCategories((current) =>
+        current.includes(next) ? current : [...current.filter((name) => name !== OTHER), next, OTHER],
+      );
       if (scope === "merchant") {
         const who = result.pattern || item.payee || item.title || "tego pośrednika";
         setInfo(
@@ -99,145 +130,152 @@ export function Transactions() {
     }
   }
 
+  async function categorizeWithAi() {
+    setBusyAi(true);
+    setError("");
+    try {
+      const result = await api.categorizeAi();
+      setInfo(
+        result.updated
+          ? `AI ustawiło kategorię dla ${result.updated} płatności. Zostało ${result.remaining} jako Inne.`
+          : "AI nie znalazło zmian — brak klucza, albo nic nie było w Inne.",
+      );
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Kategoryzacja AI nie powiodła się");
+    } finally {
+      setBusyAi(false);
+    }
+  }
+
   return (
-    <section>
-      <header className="page-head">
-        <div>
-          <p className="eyebrow">Lista operacji</p>
-          <h1>Płatności</h1>
+    <section className="page tx-page">
+      <PeriodBar
+        page="Płatności"
+        period={period}
+        minDate={bounds.minDate}
+        maxDate={bounds.maxDate}
+        onChange={setPeriod}
+      />
+
+      <div className="card filter-bar">
+        <label className="search-field">
+          <Icon name="search" />
+          <input
+            type="search"
+            aria-label="Szukaj płatności"
+            placeholder="Szukaj: koleo, orlen, zmywarka…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+        </label>
+        <div className="segmented" role="group" aria-label="Rodzaj operacji">
+          {KINDS.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              className={kind === option.id ? "active" : undefined}
+              aria-pressed={kind === option.id}
+              onClick={() => setKind(option.id)}
+            >
+              {option.label}
+            </button>
+          ))}
         </div>
-        <p className="muted">{matched} operacji w filtrze</p>
-      </header>
-
-      <p className="lede">
-        Lista zmienia kategorię tylko tej płatności. Brak kategorii to <strong>{OTHER}</strong>. Rzadziej:
-        przycisk „Dla pośrednika” ustawia ją też dla pozostałych płatności od tego sklepu.
-      </p>
-      <div className="row" style={{ margin: "-0.4rem 0 1rem" }}>
+        <select aria-label="Kategoria" value={category} onChange={(e) => setCategory(e.target.value)}>
+          <option value={ALL}>Wszystkie kategorie</option>
+          {categories.map((item) => (
+            <option key={item}>{item}</option>
+          ))}
+        </select>
+        <div className="amount-range">
+          <input
+            inputMode="decimal"
+            aria-label="Kwota od"
+            placeholder="od zł"
+            value={minAmount}
+            onChange={(e) => setMinAmount(e.target.value)}
+          />
+          <span aria-hidden>–</span>
+          <input
+            inputMode="decimal"
+            aria-label="Kwota do"
+            placeholder="do zł"
+            value={maxAmount}
+            onChange={(e) => setMaxAmount(e.target.value)}
+          />
+        </div>
         <button
-          className="primary"
-          disabled={busyAi || !uncategorized}
-          onClick={async () => {
-            setBusyAi(true);
-            setError("");
-            try {
-              const result = await api.categorizeAi();
-              setInfo(
-                result.updated
-                  ? `AI ustawiło kategorię dla ${result.updated} płatności. Zostało ${result.remaining} jako Inne.`
-                  : "AI nie znalazło zmian — brak klucza, albo nic nie było w Inne.",
-              );
-              await load();
-            } catch (err) {
-              setError(err instanceof Error ? err.message : "Kategoryzacja AI nie powiodła się");
-            } finally {
-              setBusyAi(false);
-            }
-          }}
-        >
-          {busyAi ? "AI kategoryzuje…" : `Skategoryzuj Inne przez AI (${uncategorized})`}
-        </button>
-      </div>
-
-      <PeriodBar period={period} minDate={bounds.minDate} maxDate={bounds.maxDate} onChange={setPeriod} />
-
-      <div className="filters wrap">
-        <label>
-          Typ
-          <select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
-            <option value="all">Wszystkie</option>
-            <option value="expense">Tylko wydatki</option>
-            <option value="income">Tylko przychody</option>
-          </select>
-        </label>
-        <label>
-          Kwota od
-          <input inputMode="decimal" placeholder="np. 50" value={minAmount} onChange={(e) => setMinAmount(e.target.value)} />
-        </label>
-        <label>
-          Kwota do
-          <input inputMode="decimal" placeholder="np. 500" value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} />
-        </label>
-        <label>
-          Kategoria
-          <select value={category} onChange={(e) => setCategory(e.target.value)}>
-            <option>Wszystkie</option>
-            {categories.map((item) => (
-              <option key={item}>{item}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Sortowanie
-          <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
-            <option value="date_desc">Data: najnowsze</option>
-            <option value="date_asc">Data: najstarsze</option>
-            <option value="amount_desc">Kwota: największe</option>
-            <option value="amount_asc">Kwota: najmniejsze</option>
-            <option value="category_asc">Kategoria A–Z</option>
-            <option value="category_desc">Kategoria Z–A</option>
-          </select>
-        </label>
-        <label className="grow">
-          Szukaj
-          <input placeholder="koleo, orlen, zmywarka…" value={q} onChange={(e) => setQ(e.target.value)} />
-        </label>
-        <button
-          className={category === OTHER ? "primary" : "ghost"}
           type="button"
-          onClick={() => setCategory(category === OTHER ? "Wszystkie" : OTHER)}
+          className={category === OTHER ? "toggle-chip active" : "toggle-chip"}
+          aria-pressed={category === OTHER}
+          title="Płatności bez kategorii (Inne)"
+          onClick={() => setCategory(category === OTHER ? ALL : OTHER)}
         >
-          {category === OTHER ? "Pokaż wszystkie" : "Pokaż nieskategoryzowane"}
+          Nieskategoryzowane <span className="count">{uncategorized}</span>
         </button>
+        {uncategorized ? (
+          <button type="button" className="primary" disabled={busyAi} onClick={() => void categorizeWithAi()}>
+            <Icon name="sparkle" size={16} />
+            {busyAi ? "AI kategoryzuje…" : "Skategoryzuj przez AI"}
+          </button>
+        ) : null}
+        <span className="result-count">
+          {matched} {matched === 1 ? "operacja" : "operacji"}
+          {filtered ? (
+            <button type="button" className="link-btn quiet" onClick={resetFilters}>
+              Wyczyść filtry
+            </button>
+          ) : null}
+        </span>
       </div>
 
-      {error && <p className="banner error">{error}</p>}
-      {info && <p className="banner ok">{info}</p>}
+      {error ? <p className="banner error">{error}</p> : null}
+      {info ? <p className="banner ok">{info}</p> : null}
 
-      <div className="table-wrap">
+      <div className="table-wrap tx-table">
         <table>
           <thead>
             <tr>
-              <th>
-                <button
-                  type="button"
-                  className={sort.startsWith("date") ? "th-sort active" : "th-sort"}
-                  onClick={() => setSort(sort === "date_desc" ? "date_asc" : "date_desc")}
-                >
-                  Data {sort === "date_asc" ? "↑" : sort === "date_desc" ? "↓" : ""}
+              <th className="col-date">
+                <button type="button" className={sort.startsWith("date") ? "th-sort active" : "th-sort"} onClick={() => toggleSort("date")}>
+                  Data{arrow(sort, "date")}
                 </button>
               </th>
               <th>Pośrednik / opis</th>
-              <th>
+              <th className="col-cat">
                 <button
                   type="button"
                   className={sort.startsWith("category") ? "th-sort active" : "th-sort"}
-                  onClick={() => setSort(sort === "category_asc" ? "category_desc" : "category_asc")}
+                  title="Zmiana na liście dotyczy tylko tej płatności. „Dla pośrednika” ustawia ją też dla pozostałych płatności od tego sklepu."
+                  onClick={() => toggleSort("category")}
                 >
-                  Kategoria {sort === "category_desc" ? "↓" : sort === "category_asc" ? "↑" : ""}
+                  Kategoria{arrow(sort, "category")}
                 </button>
               </th>
               <th className="num">
-                <button
-                  type="button"
-                  className={sort.startsWith("amount") ? "th-sort active" : "th-sort"}
-                  onClick={() => setSort(sort === "amount_desc" ? "amount_asc" : "amount_desc")}
-                >
-                  Kwota {sort === "amount_asc" ? "↑" : sort === "amount_desc" ? "↓" : ""}
+                <button type="button" className={sort.startsWith("amount") ? "th-sort active" : "th-sort"} onClick={() => toggleSort("amount")}>
+                  Kwota{arrow(sort, "amount")}
                 </button>
               </th>
             </tr>
           </thead>
           <tbody>
             {items.map((item) => {
-              const uncategorized = item.category === OTHER;
+              const description = [item.title, item.type].filter(Boolean).join(" · ");
               return (
-                <tr key={item.id} className={uncategorized ? "uncat" : undefined}>
-                  <td className="nowrap">{item.date}</td>
-                  <td>
-                    <strong>{item.payee || item.type || "Operacja"}</strong>
-                    <p className="muted">{[item.title, item.type].filter(Boolean).join(" · ")}</p>
-                    <CommentNote value={item.comment || ""} onSave={(next) => void changeComment(item, next)} />
+                <tr key={item.id} className={item.category === OTHER ? "uncat" : undefined}>
+                  <td className="tx-date">{formatDay(item.date)}</td>
+                  <td className="tx-who">
+                    <strong title={item.payee || undefined}>{item.payee || item.type || "Operacja"}</strong>
+                    <div className="tx-desc">
+                      {description ? <span title={description}>{description}</span> : null}
+                      <CommentNote
+                        compact
+                        value={item.comment || ""}
+                        onSave={(next) => void changeComment(item, next)}
+                      />
+                    </div>
                   </td>
                   <td>
                     <CategorySelect
@@ -247,14 +285,21 @@ export function Transactions() {
                       onChange={(next, scope) => void changeCategory(item, next, scope)}
                     />
                   </td>
-                  <td className={item.amount < 0 ? "num neg" : "num pos"}>{money(item.amount)}</td>
+                  <td className={item.amount < 0 ? "num neg strong" : "num pos strong"}>{money(item.amount)}</td>
                 </tr>
               );
             })}
             {!items.length && (
               <tr>
-                <td colSpan={4} className="muted">
-                  Brak transakcji dla wybranych filtrów. Sprawdź zakres dat i kwoty.
+                <td colSpan={4} className="muted empty-row">
+                  Brak transakcji dla wybranych filtrów.{" "}
+                  {filtered ? (
+                    <button type="button" className="link-btn" onClick={resetFilters}>
+                      Wyczyść filtry
+                    </button>
+                  ) : (
+                    "Sprawdź zakres dat."
+                  )}
                 </td>
               </tr>
             )}

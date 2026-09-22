@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { Icon } from "../components/Icon";
 import type { BankStatus } from "../types";
 
 export function BankPage({ autoSync }: { autoSync: boolean }) {
@@ -75,23 +76,123 @@ export function BankPage({ autoSync }: { autoSync: boolean }) {
     }
   }
 
+  const hasSecrets = Boolean(status?.hasSecrets);
+  const connected = Boolean(status?.requisitionId);
+  const accounts = status?.accounts ?? [];
+  const steps = [
+    { label: "Klucze GoCardless", done: hasSecrets },
+    { label: "Zgoda w PKO", done: connected },
+    { label: "Pobieranie historii", done: accounts.length > 0 },
+  ];
+  const current = steps.findIndex((step) => !step.done);
+
   return (
-    <section>
+    <section className="page">
       <header className="page-head">
         <div>
-          <p className="eyebrow">Open Banking</p>
-          <h1>Połączenie z PKO</h1>
+          <p className="eyebrow">Dane</p>
+          <h1>Bank PKO</h1>
         </div>
       </header>
 
-      <div className="grid-2">
+      <div className="split">
+        <div className="stack">
+          <article className="card">
+            <ol className="stepper">
+              {steps.map((step, index) => (
+                <li
+                  key={step.label}
+                  className={step.done ? "done" : index === current ? "current" : undefined}
+                >
+                  <span className="stepper-dot">{step.done ? <Icon name="check" size={14} /> : index + 1}</span>
+                  {step.label}
+                </li>
+              ))}
+            </ol>
+
+            <div className="bank-actions">
+              {connected ? (
+                <>
+                  <button className="primary lg" type="button" disabled={busy} onClick={() => void sync()}>
+                    {busy ? "Pobieram…" : "Pobierz nowe transakcje"}
+                  </button>
+                  <button className="ghost" type="button" disabled={busy || !hasSecrets} onClick={() => void connect()}>
+                    Odnów zgodę
+                  </button>
+                </>
+              ) : (
+                <button
+                  className="primary lg"
+                  type="button"
+                  disabled={busy || !hasSecrets}
+                  onClick={() => void connect()}
+                >
+                  <Icon name="bank" size={18} />
+                  Połącz z PKO
+                </button>
+              )}
+              <label className="check">
+                <input type="checkbox" checked={sandbox} onChange={(e) => setSandbox(e.target.checked)} />
+                Sandbox (test bez PKO)
+              </label>
+            </div>
+            {!hasSecrets ? <p className="muted">Najpierw wklej klucze GoCardless poniżej.</p> : null}
+
+            {accounts.length ? (
+              <ul className="accounts">
+                {accounts.map((account) => (
+                  <li key={account.id}>
+                    <strong>{account.name}</strong>
+                    <span>{account.iban || account.id}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {message ? <p className="banner ok">{message}</p> : null}
+            {error ? <p className="banner error">{error}</p> : null}
+          </article>
+
+          <article className="card">
+            <div className="card-head">
+              <div>
+                <h2>Klucze GoCardless</h2>
+                <p className="card-sub">Zapisane lokalnie w bazie SQLite na tym komputerze.</p>
+              </div>
+              <span className={hasSecrets ? "pill ok" : "pill"}>{hasSecrets ? "zapisane" : "brak"}</span>
+            </div>
+            <form
+              className="key-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (secretId && secretKey) void save();
+              }}
+            >
+              <label>
+                Secret ID
+                <input value={secretId} onChange={(e) => setSecretId(e.target.value)} autoComplete="off" />
+              </label>
+              <label>
+                Secret Key
+                <input
+                  type="password"
+                  value={secretKey}
+                  onChange={(e) => setSecretKey(e.target.value)}
+                  autoComplete="off"
+                />
+              </label>
+              <button className={hasSecrets ? "ghost" : "primary"} type="submit" disabled={busy || !secretId || !secretKey}>
+                Zapisz klucze
+              </button>
+            </form>
+          </article>
+        </div>
+
         <article className="card">
-          <h2>Dlaczego nie logujemy się wprost do iPKO?</h2>
-          <p>
-            Oficjalne API PKO (PSD2 / PolishAPI) jest dostępne tylko dla licencjonowanych TPP. Ta
-            aplikacja łączy się z bankiem przez <strong>GoCardless Bank Account Data</strong> —
-            licencjonowanego pośrednika. Ty logujesz się na stronie PKO, a my dostajemy wyłącznie
-            historię transakcji.
+          <h2>Jak to działa</h2>
+          <p className="muted">
+            Oficjalne API PKO (PSD2 / PolishAPI) jest dostępne tylko dla licencjonowanych TPP. Aplikacja łączy się
+            przez <strong>GoCardless Bank Account Data</strong> — logujesz się na stronie PKO, a tu trafia wyłącznie
+            historia transakcji.
           </p>
           <ol className="steps">
             <li>
@@ -101,57 +202,12 @@ export function BankPage({ autoSync }: { autoSync: boolean }) {
               </a>
               .
             </li>
-            <li>Wygeneruj <strong>Secret ID</strong> i <strong>Secret Key</strong>.</li>
-            <li>Wklej je poniżej i kliknij „Połącz z PKO”.</li>
+            <li>
+              Wygeneruj <strong>Secret ID</strong> i <strong>Secret Key</strong>.
+            </li>
+            <li>Wklej je obok i kliknij „Połącz z PKO”.</li>
             <li>Zatwierdź zgodę w bankowości PKO. Zgoda działa do 90 dni.</li>
           </ol>
-        </article>
-
-        <article className="card">
-          <h2>Klucze i synchronizacja</h2>
-          <label>
-            Secret ID
-            <input value={secretId} onChange={(e) => setSecretId(e.target.value)} autoComplete="off" />
-          </label>
-          <label>
-            Secret Key
-            <input
-              type="password"
-              value={secretKey}
-              onChange={(e) => setSecretKey(e.target.value)}
-              autoComplete="off"
-            />
-          </label>
-          <div className="row">
-            <button className="ghost" disabled={busy || !secretId || !secretKey} onClick={() => void save()}>
-              Zapisz klucze
-            </button>
-            <label className="check">
-              <input type="checkbox" checked={sandbox} onChange={(e) => setSandbox(e.target.checked)} />
-              Sandbox (test bez PKO)
-            </label>
-          </div>
-          <div className="row">
-            <button className="primary" disabled={busy || !status?.hasSecrets} onClick={() => void connect()}>
-              Połącz z PKO
-            </button>
-            <button className="ghost" disabled={busy || !status?.requisitionId} onClick={() => void sync()}>
-              Pobierz transakcje
-            </button>
-          </div>
-          {status?.hasSecrets && <p className="muted">Klucze są zapisane lokalnie w bazie SQLite.</p>}
-          {status?.accounts?.length ? (
-            <ul className="accounts">
-              {status.accounts.map((account) => (
-                <li key={account.id}>
-                  <strong>{account.name}</strong>
-                  <span>{account.iban || account.id}</span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          {message && <p className="banner ok">{message}</p>}
-          {error && <p className="banner error">{error}</p>}
         </article>
       </div>
     </section>

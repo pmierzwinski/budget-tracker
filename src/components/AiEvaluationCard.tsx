@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { evaluationKey } from "../format";
+import { Icon } from "./Icon";
 import type { Period } from "./PeriodBar";
 import type { PeriodEvaluation } from "../types";
 
@@ -11,19 +12,37 @@ export type EvalFilters = {
   maxAmount?: string;
 };
 
-export function AiEvaluationCard({
+function stamp(iso: string): string {
+  return new Date(iso).toLocaleString("pl-PL", { dateStyle: "short", timeStyle: "short" });
+}
+
+function Badge() {
+  return (
+    <span className="ai-badge">
+      <Icon name="sparkle" size={15} />
+      Ocena AI
+    </span>
+  );
+}
+
+export function AiEvaluation({
   period,
   filters,
   disabled,
+  onSetup,
+  variant = "panel",
 }: {
   period: Period;
   filters?: EvalFilters;
   disabled?: boolean;
+  onSetup?: () => void;
+  variant?: "panel" | "strip";
 }) {
   const [evaluations, setEvaluations] = useState<PeriodEvaluation[]>([]);
-  const [hasAiKey, setHasAiKey] = useState(false);
+  const [hasAiKey, setHasAiKey] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
     api
@@ -35,8 +54,7 @@ export function AiEvaluationCard({
       .catch((err: Error) => setError(err.message));
   }, []);
 
-  const scope = evaluationKey(period, filters);
-  const current = evaluations.find((row) => row.scope === scope);
+  const current = evaluations.find((row) => row.scope === evaluationKey(period, filters));
 
   async function generate() {
     setBusy(true);
@@ -59,43 +77,97 @@ export function AiEvaluationCard({
     }
   }
 
+  if (hasAiKey === null && !error) return null;
+
+  if (!hasAiKey) {
+    return (
+      <div className={`ai ai-${variant} ai-off`}>
+        <Badge />
+        <p className="muted">
+          Wymaga klucza OpenAI.{" "}
+          {onSetup ? (
+            <button type="button" className="link-btn" onClick={onSetup}>
+              Dodaj w Kategoriach
+            </button>
+          ) : (
+            "Dodaj go w Kategoriach."
+          )}
+        </p>
+        {error ? <p className="banner error">{error}</p> : null}
+      </div>
+    );
+  }
+
+  const canAsk = !busy && !disabled && Boolean(period.from && period.to);
+
   return (
-    <article className="card ai-eval">
-      <div className="card-head">
-        <h2>Ocena AI</h2>
-        <button
-          type="button"
-          className="primary"
-          disabled={busy || disabled || !hasAiKey || !period.from || !period.to}
-          onClick={() => void generate()}
-        >
-          {busy ? "Pytam AI…" : current ? "Oceń ponownie" : "Zapytaj AI o ten widok"}
-        </button>
+    <div className={`ai ai-${variant}`}>
+      <div className="ai-head">
+        <Badge />
+        {current?.createdAt && !busy ? <span className="ai-date">{stamp(current.createdAt)}</span> : null}
       </div>
       {busy ? (
-        <p className="muted">Patrzę na wydatki z tego zakresu i na cały okres, który masz ustawiony.</p>
+        <p className="muted ai-busy">Analizuję wydatki z tego okresu…</p>
       ) : current ? (
         <>
-          <p className="muted ai-eval-meta">
-            {current.label}
-            {current.createdAt
-              ? ` · ${new Date(current.createdAt).toLocaleString("pl-PL", {
-                  dateStyle: "short",
-                  timeStyle: "short",
-                })}`
-              : ""}
-          </p>
-          <p className="ai-eval-text">{current.text}</p>
+          <p className="ai-preview">{current.text}</p>
+          <div className="ai-actions">
+            <button type="button" className="link-btn" onClick={() => dialogRef.current?.showModal()}>
+              Czytaj całość
+            </button>
+            <button type="button" className="link-btn quiet" disabled={!canAsk} onClick={() => void generate()}>
+              Oceń ponownie
+            </button>
+          </div>
         </>
-      ) : !hasAiKey ? (
-        <p className="muted">Żeby zapytać, wklej klucz OpenAI w zakładce Kategorie.</p>
       ) : (
-        <p className="muted">
-          Kliknij, a AI skomentuje konkretne wydatki i okres, który teraz oglądasz. Jak zmienisz zakres, ten
-          komentarz zostaje — dla nowego widoku pytasz znowu.
-        </p>
+        <button type="button" className="ghost sm ai-ask" disabled={!canAsk} onClick={() => void generate()}>
+          Oceń ten okres
+        </button>
       )}
       {error ? <p className="banner error">{error}</p> : null}
-    </article>
+      {current ? (
+        <dialog
+          ref={dialogRef}
+          className="ai-dialog"
+          aria-label={`Ocena AI: ${current.label}`}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) event.currentTarget.close();
+          }}
+        >
+          <div className="ai-dialog-body">
+            <header>
+              <div>
+                <Badge />
+                <h2>{current.label}</h2>
+              </div>
+              <button
+                type="button"
+                className="icon-btn"
+                aria-label="Zamknij"
+                onClick={() => dialogRef.current?.close()}
+              >
+                <Icon name="close" />
+              </button>
+            </header>
+            <p className="ai-text">{current.text}</p>
+            <footer>
+              <span className="muted">{current.createdAt ? stamp(current.createdAt) : ""}</span>
+              <button
+                type="button"
+                className="ghost sm"
+                disabled={!canAsk}
+                onClick={() => {
+                  dialogRef.current?.close();
+                  void generate();
+                }}
+              >
+                Oceń ponownie
+              </button>
+            </footer>
+          </div>
+        </dialog>
+      ) : null}
+    </div>
   );
 }

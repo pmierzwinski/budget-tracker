@@ -1,77 +1,94 @@
-import { useState, type MouseEvent } from "react";
-import { categoryColor, compactMoney, money, monthLabel, percent, shortMonthTick, WEEKDAY_LABELS } from "../format";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
+import {
+  MONTHS_SHORT,
+  WEEKDAY_LABELS,
+  categoryColor,
+  compactMoney,
+  money,
+  monthLabel,
+  percent,
+  roundMoney,
+  shortMonthTick,
+} from "../format";
+import type { CategoryBudget } from "../types";
 
-function selectedSet(selected?: string | string[]): string[] {
-  if (!selected) return [];
-  return Array.isArray(selected) ? selected : [selected];
+const PLOT = 110;
+
+function useWidth<T extends HTMLElement>(fallback: number) {
+  const ref = useRef<T>(null);
+  const [width, setWidth] = useState(fallback);
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const observer = new ResizeObserver(([entry]) => {
+      setWidth(Math.max(280, Math.round(entry.contentRect.width)));
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  return [ref, width] as const;
 }
 
-export function CategoryColumns({
+export function CategoryBars({
   slices,
-  compact,
   selected,
   limits,
   onSelect,
 }: {
   slices: { category: string; amount: number }[];
-  compact?: boolean;
-  selected?: string | string[];
-  limits?: { category: string; ratio: number; status: "ok" | "warn" | "over" }[];
+  selected?: string[];
+  limits?: CategoryBudget[];
   onSelect?: (category: string, additive: boolean) => void;
 }) {
-  const picked = selectedSet(selected);
-  const shown = slices.filter((slice) => slice.amount < 0);
-  const spendMax = Math.max(1, ...shown.map((slice) => -slice.amount));
-  const total = shown.reduce((sum, slice) => sum + -slice.amount, 0) || 1;
+  const picked = selected || [];
+  const rows = slices
+    .filter((slice) => slice.amount < 0)
+    .map((slice) => ({ category: slice.category, spend: -slice.amount }));
+  const max = Math.max(1, ...rows.map((row) => row.spend));
+  const total = rows.reduce((sum, row) => sum + row.spend, 0) || 1;
   const limitByName = new Map((limits || []).map((row) => [row.category, row]));
+  const withLimits = rows.some((row) => limitByName.has(row.category));
+
   return (
-    <div className={compact ? "cat-chart compact" : "cat-chart"}>
-      <div className="cat-cols">
-        {shown.map((slice) => {
-          const limit = limitByName.get(slice.category);
-          return (
-          <button
-            type="button"
-            key={slice.category}
-            className={picked.includes(slice.category) ? "cat-col selected" : "cat-col"}
-            onClick={(event) => onSelect?.(slice.category, event.ctrlKey || event.metaKey)}
-            title={`${slice.category}: ${money(slice.amount)} (${percent(Math.abs(Math.min(slice.amount, 0)), total)})`}
-          >
-            <span className={slice.amount >= 0 ? "cat-col-amount pos" : "cat-col-amount neg"}>
-              {money(slice.amount)}
-            </span>
-            <div
-              className="cat-col-bar"
-              style={{
-                height: `${Math.max(4, (Math.min(Math.abs(slice.amount), spendMax) / spendMax) * (compact ? 140 : 180))}px`,
-                background: slice.amount >= 0 ? "var(--income)" : categoryColor(slice.category),
-              }}
-            />
-            <span className="cat-col-label">{slice.category}</span>
-            <span className="cat-col-pct">{percent(Math.abs(Math.min(slice.amount, 0)), total)}</span>
-            {limit ? (
-              <span className={`cat-col-limit ${limit.status}`}>
-                {percent(limit.ratio, 1)} limitu
+    <ul className={withLimits ? "hbars has-limits" : "hbars"}>
+      {rows.map((row) => {
+        const limit = limitByName.get(row.category);
+        const active = picked.includes(row.category);
+        const color = categoryColor(row.category);
+        const classes = ["hbar", active ? "selected" : "", picked.length && !active ? "dimmed" : ""];
+        return (
+          <li key={row.category}>
+            <button
+              type="button"
+              className={classes.filter(Boolean).join(" ")}
+              aria-pressed={active}
+              title={`${row.category}: ${money(row.spend)} (${percent(row.spend, total)} wydatków)${
+                limit ? ` · limit ${money(limit.allowed)}` : ""
+              }`}
+              onClick={(event) => onSelect?.(row.category, event.ctrlKey || event.metaKey)}
+            >
+              <span className="hbar-name">
+                <span className="hbar-dot" style={{ background: color }} />
+                <span className="hbar-label">{row.category}</span>
               </span>
-            ) : null}
-          </button>
-          );
-        })}
-      </div>
-      {!compact && (
-        <ul className="cat-values">
-          {shown.map((slice) => (
-            <li key={slice.category}>
-              <span style={{ background: categoryColor(slice.category) }} />
-              <strong>{slice.category}</strong>
-              <em>
-                {percent(Math.abs(Math.min(slice.amount, 0)), total)} · {money(slice.amount)}
-              </em>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+              <span className="hbar-track">
+                <span
+                  className="hbar-fill"
+                  style={{ width: `${Math.max(0.8, (row.spend / max) * 100)}%`, background: color }}
+                />
+              </span>
+              <span className="hbar-amount">{money(row.spend)}</span>
+              <span className="hbar-pct">{percent(row.spend, total)}</span>
+              {withLimits ? (
+                <span className={limit ? `hbar-limit ${limit.status}` : "hbar-limit"}>
+                  {limit ? `${percent(limit.ratio, 1)} limitu` : ""}
+                </span>
+              ) : null}
+            </button>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -81,10 +98,10 @@ export function Donut({
   onSelect,
 }: {
   slices: { category: string; amount: number }[];
-  selected?: string | string[];
+  selected?: string[];
   onSelect?: (category: string, additive: boolean) => void;
 }) {
-  const picked = selectedSet(selected);
+  const picked = selected || [];
   const pie = slices
     .map((slice) => ({ ...slice, spend: Math.abs(Math.min(slice.amount, 0)) }))
     .filter((slice) => slice.spend > 0);
@@ -96,13 +113,13 @@ export function Donut({
     ? pie.filter((slice) => picked.includes(slice.category)).reduce((sum, slice) => sum + slice.spend, 0)
     : total;
   const selectedLabel =
-    picked.length === 1 ? picked[0] : picked.length > 1 ? `${picked.length} kategorie` : "Wydatki";
+    picked.length === 1 ? picked[0] : picked.length > 1 ? `${picked.length} kategorie` : "wszystkich wydatków";
 
   return (
     <div className="donut-wrap">
       <div className="donut-frame">
         <svg viewBox="0 0 120 120" className="donut">
-          <circle cx="60" cy="60" r={radius} fill="none" stroke="#ece6d8" strokeWidth="14" />
+          <circle cx="60" cy="60" r={radius} fill="none" stroke="#eef0f3" strokeWidth="14" />
           {pie.map((slice) => {
             const length = (slice.spend / total) * circumference;
             const dimmed = Boolean(picked.length && !picked.includes(slice.category));
@@ -117,12 +134,13 @@ export function Donut({
                 strokeWidth="14"
                 strokeDasharray={`${length} ${circumference - length}`}
                 strokeDashoffset={-offset}
-                strokeLinecap="butt"
                 opacity={dimmed ? 0.25 : 1}
                 transform="rotate(-90 60 60)"
                 style={{ cursor: onSelect ? "pointer" : undefined }}
                 onClick={(event) => onSelect?.(slice.category, event.ctrlKey || event.metaKey)}
-              />
+              >
+                <title>{`${slice.category}: ${money(slice.spend)} (${percent(slice.spend, total)})`}</title>
+              </circle>
             );
             offset += length;
             return circle;
@@ -142,8 +160,10 @@ export function Donut({
               onClick={(event) => onSelect?.(slice.category, event.ctrlKey || event.metaKey)}
             >
               <span style={{ background: categoryColor(slice.category) }} />
-              <strong>{slice.category}</strong>
-              <em>{money(slice.amount)}</em>
+              {slice.category}
+              <em>
+                {money(slice.spend)} · {percent(slice.spend, total)}
+              </em>
             </button>
           </li>
         ))}
@@ -152,23 +172,34 @@ export function Donut({
   );
 }
 
-export function Bars({
-  months,
-}: {
-  months: { month: string; income: number; expenses: number }[];
-}) {
+export function MonthBars({ months }: { months: { month: string; income: number; expenses: number }[] }) {
   const max = Math.max(1, ...months.flatMap((row) => [row.income, row.expenses]));
+  const labelEvery = Math.max(1, Math.ceil(months.length / 12));
   return (
-    <div className="bars">
-      {months.map((row) => (
-        <div key={row.month} className="bar-col">
-          <div className="bar-tracks">
-            <div className="bar income" style={{ height: `${(row.income / max) * 100}%` }} />
-            <div className="bar expense" style={{ height: `${(row.expenses / max) * 100}%` }} />
+    <div>
+      <div className="vcols">
+        {months.map((row, index) => (
+          <div
+            key={row.month}
+            className="vcol"
+            title={`${monthLabel(row.month)}\nprzychody ${money(row.income)}\nwydatki ${money(row.expenses)}`}
+          >
+            <span className="vcol-pair">
+              <span className="vcol-bar income" style={{ height: `${Math.max(2, (row.income / max) * PLOT)}px` }} />
+              <span className="vcol-bar expense" style={{ height: `${Math.max(2, (row.expenses / max) * PLOT)}px` }} />
+            </span>
+            <span className="vcol-label">
+              {(months.length - 1 - index) % labelEvery === 0 ? MONTHS_SHORT[Number(row.month.slice(5, 7)) - 1] : ""}
+            </span>
           </div>
-          <span>{row.month.slice(5)}</span>
-        </div>
-      ))}
+        ))}
+      </div>
+      <p className="chart-key">
+        <span className="dot income" />
+        przychody
+        <span className="dot expense" />
+        wydatki
+      </p>
     </div>
   );
 }
@@ -178,25 +209,24 @@ export function WeekdayBars({ days }: { days: { id: number; amount: number }[] }
   const total = days.reduce((sum, day) => sum + day.amount, 0) || 1;
   const peak = days.reduce((best, day) => (day.amount > best.amount ? day : best), days[0]);
   return (
-    <div className="weekday-chart">
-      <div className="weekday-cols">
-        {days.map((day, index) => (
-          <div key={day.id} className={peak?.id === day.id ? "weekday-col peak" : "weekday-col"}>
-            <span className="cat-col-amount">{compactMoney(day.amount)}</span>
-            <div
-              className="weekday-bar"
-              style={{ height: `${Math.max(4, (day.amount / max) * 120)}px` }}
-            />
-            <span className="cat-col-label">{WEEKDAY_LABELS[index]}</span>
-            <span className="cat-col-pct">{percent(day.amount, total)}</span>
-          </div>
-        ))}
-      </div>
-    </div>
+    <ul className="meters">
+      {days.map((day, index) => (
+        <li
+          key={day.id}
+          className={peak?.id === day.id && day.amount > 0 ? "meter peak" : "meter"}
+          title={`${WEEKDAY_LABELS[index]}: ${money(day.amount)} (${percent(day.amount, total)})`}
+        >
+          <span className="meter-fill" style={{ width: `${(day.amount / max) * 100}%` }} />
+          <span className="meter-label">{WEEKDAY_LABELS[index]}</span>
+          <span className="meter-value">{day.amount ? roundMoney(day.amount) : "–"}</span>
+          <span className="meter-sub">{percent(day.amount, total)}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
-export function AmountColumns({
+export function AmountBars({
   slices,
   selected,
   onSelect,
@@ -206,37 +236,29 @@ export function AmountColumns({
   onSelect?: (id: string) => void;
 }) {
   const max = Math.max(1, ...slices.map((slice) => slice.amount));
-  const total = slices.reduce((sum, slice) => sum + slice.amount, 0) || 1;
-  const colors = ["#1b2a4a", "#3d6ea8", "#c47a12", "#8a8175"];
+  const ordered = [...slices].reverse();
   return (
-    <div className="cat-chart compact">
-      <div className="cat-cols">
-        {slices.map((slice, index) => (
+    <ul className="meters">
+      {ordered.map((slice) => (
+        <li key={slice.id}>
           <button
             type="button"
-            key={slice.id}
-            className={selected === slice.id ? "cat-col selected" : "cat-col"}
-            onClick={() => onSelect?.(slice.id)}
+            className={selected === slice.id ? "meter selected" : "meter"}
+            aria-pressed={selected === slice.id}
             title={`${slice.label}: ${money(slice.amount)} · ${slice.count} płatności`}
+            onClick={() => onSelect?.(slice.id)}
           >
-            <span className="cat-col-amount">{money(slice.amount)}</span>
-            <div
-              className="cat-col-bar"
-              style={{
-                height: `${Math.max(4, (slice.amount / max) * 140)}px`,
-                background: colors[index % colors.length],
-              }}
-            />
-            <span className="cat-col-label">{slice.label}</span>
-            <span className="cat-col-pct">
-              {slice.count} szt. · {percent(slice.amount, total)}
-            </span>
+            <span className="meter-fill" style={{ width: `${(slice.amount / max) * 100}%` }} />
+            <span className="meter-label">{slice.label}</span>
+            <span className="meter-value">{slice.amount ? roundMoney(slice.amount) : "–"}</span>
+            <span className="meter-sub">{slice.count} szt.</span>
           </button>
-        ))}
-      </div>
-    </div>
+        </li>
+      ))}
+    </ul>
   );
 }
+
 export function TrendLines({
   months,
   series,
@@ -251,17 +273,18 @@ export function TrendLines({
   yMax?: number;
 }) {
   const [hover, setHover] = useState<{ index: number; category: string } | null>(null);
+  const [plotRef, width] = useWidth<HTMLDivElement>(720);
   const visible = series.filter((row) => !hidden.has(row.category));
   const dataMax = Math.max(1, ...visible.flatMap((row) => row.values));
   const max = Math.max(1, yMax && yMax > 0 ? yMax : dataMax);
-  const width = 640;
-  const height = 280;
-  const pad = { left: 64, right: 16, top: 16, bottom: 36 };
+  const height = 320;
+  const pad = { left: 58, right: 14, top: 14, bottom: 30 };
   const innerW = width - pad.left - pad.right;
   const innerH = height - pad.top - pad.bottom;
   const x = (index: number) =>
     pad.left + (months.length <= 1 ? innerW / 2 : (index / (months.length - 1)) * innerW);
   const y = (value: number) => pad.top + innerH - (Math.min(Math.max(value, 0), max) / max) * innerH;
+  const tickEvery = Math.max(1, Math.ceil(months.length / Math.max(2, Math.floor(innerW / 64))));
 
   function moveHover(event: MouseEvent<SVGSVGElement>) {
     if (!visible.length || !months.length) return;
@@ -294,15 +317,18 @@ export function TrendLines({
   }
 
   const hovered = hover && visible.find((row) => row.category === hover.category);
-  const tooltipLeft = hover ? Math.min(86, Math.max(8, (x(hover.index) / width) * 100)) : 0;
+  const tooltipLeft = hover ? Math.min(84, Math.max(10, (x(hover.index) / width) * 100)) : 0;
 
   return (
     <div className="trend-chart">
-      <div className="trend-plot">
+      <div className="trend-plot" ref={plotRef}>
         <svg
           viewBox={`0 0 ${width} ${height}`}
+          width={width}
+          height={height}
           className="trend-svg"
           role="img"
+          aria-label="Wydatki kategorii w kolejnych miesiącach"
           onMouseMove={moveHover}
           onMouseLeave={() => setHover(null)}
         >
@@ -311,7 +337,7 @@ export function TrendLines({
             const py = pad.top + innerH * part;
             return (
               <g key={part}>
-                <line x1={pad.left} x2={width - pad.right} y1={py} y2={py} stroke="#eee6d8" />
+                <line x1={pad.left} x2={width - pad.right} y1={py} y2={py} stroke="#eceef2" />
                 <text x={pad.left - 8} y={py + 4} textAnchor="end" className="trend-axis">
                   {compactMoney(value)}
                 </text>
@@ -324,7 +350,7 @@ export function TrendLines({
               x2={x(hover.index)}
               y1={pad.top}
               y2={pad.top + innerH}
-              stroke="#cbb89a"
+              stroke="#98a2b3"
               strokeDasharray="3 3"
             />
           ) : null}
@@ -336,8 +362,9 @@ export function TrendLines({
                 key={row.category}
                 fill="none"
                 stroke={categoryColor(row.category)}
-                strokeWidth={active ? "2.1" : "1.25"}
-                opacity={hover && !active ? 0.35 : 1}
+                strokeWidth={active ? 2.6 : 1.6}
+                strokeLinejoin="round"
+                opacity={hover && !active ? 0.3 : 1}
                 points={points}
               />
             );
@@ -346,17 +373,19 @@ export function TrendLines({
             <circle
               cx={x(hover.index)}
               cy={y(hovered.values[hover.index] || 0)}
-              r="4"
+              r="4.5"
               fill={categoryColor(hovered.category)}
               stroke="#fff"
               strokeWidth="1.5"
             />
           ) : null}
-          {months.map((month, index) => (
-            <text key={month} x={x(index)} y={height - 10} textAnchor="middle" className="trend-axis">
-              {shortMonthTick(month)}
-            </text>
-          ))}
+          {months.map((month, index) =>
+            (months.length - 1 - index) % tickEvery === 0 ? (
+              <text key={month} x={x(index)} y={height - 8} textAnchor="middle" className="trend-axis">
+                {shortMonthTick(month)}
+              </text>
+            ) : null,
+          )}
         </svg>
         {hover && hovered ? (
           <div className="trend-tooltip" style={{ left: `${tooltipLeft}%` }}>
@@ -384,28 +413,24 @@ export function TrendLines({
       </div>
       <ul className="legend trend-legend">
         {series.map((row) => {
-          const isolated = hidden.size > 0 && !hidden.has(row.category);
           const off = hidden.has(row.category);
+          const isolated = hidden.size > 0 && !off;
           return (
             <li key={row.category}>
               <button
                 type="button"
-                className={`legend-btn ${off ? "off" : ""} ${isolated && hidden.size ? "active" : ""}`}
+                className={`legend-btn${off ? " off" : ""}${isolated ? " active" : ""}`}
+                aria-pressed={isolated}
                 onClick={() => onLegend(row.category)}
               >
                 <span style={{ background: categoryColor(row.category) }} />
                 {row.category}
+                <em>{compactMoney(row.values.reduce((sum, value) => sum + value, 0))}</em>
               </button>
             </li>
           );
         })}
       </ul>
-      {months[0] && months[months.length - 1] ? (
-        <p className="muted chart-hint">
-          {monthLabel(months[0])} – {monthLabel(months[months.length - 1])}. Najedź na linię, żeby zobaczyć kategorię.
-          Kliknij legendę, żeby zostawić tylko ją.
-        </p>
-      ) : null}
     </div>
   );
 }

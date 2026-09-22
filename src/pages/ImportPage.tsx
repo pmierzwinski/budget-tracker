@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
+import { Icon } from "../components/Icon";
 
 function isCsvFile(file: File): boolean {
   const name = file.name.toLowerCase();
@@ -108,24 +109,48 @@ export function ImportPage({ onImported }: { onImported?: () => void }) {
     };
   }, []);
 
+  async function loadDemo() {
+    setBusy(true);
+    setError("");
+    try {
+      const result = await api.importDemo();
+      setMessage(
+        result.imported
+          ? `Wczytano przykład: ${result.imported} operacji.`
+          : `Przykład już jest w bazie (pominięto ${result.skipped} duplikatów).`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Nie udało się wczytać przykładu");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clear(all: boolean) {
+    const question = all
+      ? "Usunąć transakcje, kategorie własne i reguły?"
+      : "Usunąć wszystkie transakcje? Kategorie i reguły zostaną.";
+    if (!confirm(question)) return;
+    setError("");
+    try {
+      await api.clear(all);
+      setMessage(all ? "Wyczyszczono całą lokalną bazę wydatków." : "Wyczyszczono transakcje.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Nie udało się wyczyścić danych");
+    }
+  }
+
   return (
-    <section>
+    <section className="page">
       <header className="page-head">
         <div>
-          <p className="eyebrow">Wyciąg z iPKO</p>
-          <h1>Import CSV</h1>
+          <p className="eyebrow">Dane</p>
+          <h1>Import z iPKO</h1>
         </div>
       </header>
 
-      <div className="grid-2">
+      <div className="split">
         <article className="card">
-          <h2>Jak pobrać historię z PKO</h2>
-          <ol className="steps">
-            <li>Zaloguj się do <strong>iPKO</strong>.</li>
-            <li>Wejdź w konto → <strong>Historia operacji</strong>.</li>
-            <li>Ustaw zakres dat i kliknij <strong>Pobierz / CSV</strong>.</li>
-            <li>Wgraj plik tutaj. Aplikacja rozpozna kolumny i pominie duplikaty.</li>
-          </ol>
           <div
             ref={zoneRef}
             className={`drop ${busy ? "disabled" : ""} ${dragging ? "over" : ""}`}
@@ -153,91 +178,88 @@ export function ImportPage({ onImported }: { onImported?: () => void }) {
                 e.target.value = "";
               }}
             />
-            <strong>
-              {busy ? "Importuję…" : dragging ? "Upuść plik tutaj" : "Upuść plik CSV albo kliknij, żeby wybrać"}
-            </strong>
-            <span>Obsługiwane są wyciągi iPKO (średnik lub przecinek, UTF-8 / Windows-1250).</span>
+            <span className="drop-icon">
+              <Icon name="upload" size={26} />
+            </span>
+            <strong>{busy ? "Importuję…" : dragging ? "Upuść plik tutaj" : "Upuść plik CSV z iPKO"}</strong>
+            <span>
+              albo <u>kliknij, żeby wybrać</u> · średnik lub przecinek, UTF-8 / Windows-1250
+            </span>
           </div>
-          <label className="check">
-            <input type="checkbox" checked={replaceCsv} onChange={(e) => setReplaceCsv(e.target.checked)} />
-            Zastąp poprzedni import CSV (kasuje stare wpisy z CSV i wczytuje plik od nowa)
-          </label>
-          <label className="check">
-            <input type="checkbox" checked={useAi} onChange={(e) => setUseAi(e.target.checked)} />
-            Po imporcie skategoryzuj nowe płatności przez AI
-          </label>
-          {message && (
-            <>
-              <p className="banner ok">{message}</p>
+
+          <div className="drop-options">
+            <label className="check">
+              <input type="checkbox" checked={useAi} onChange={(e) => setUseAi(e.target.checked)} />
+              <span>
+                Skategoryzuj nowe płatności przez AI
+                <small>od razu po imporcie, tylko to, co trafi do Inne</small>
+              </span>
+            </label>
+            <label className="check">
+              <input type="checkbox" checked={replaceCsv} onChange={(e) => setReplaceCsv(e.target.checked)} />
+              <span>
+                Zastąp poprzedni import CSV
+                <small>kasuje stare wpisy z CSV i wczytuje plik od nowa</small>
+              </span>
+            </label>
+          </div>
+
+          {message ? (
+            <div className="banner ok with-action">
+              <span>{message}</span>
               {onImported ? (
-                <button className="ghost" type="button" onClick={onImported}>
-                  Przejdź do płatności
+                <button className="primary sm" type="button" onClick={onImported}>
+                  Zobacz płatności
                 </button>
               ) : null}
-            </>
-          )}
-          {error && <p className="banner error">{error}</p>}
+            </div>
+          ) : null}
+          {error ? <p className="banner error">{error}</p> : null}
+          <p className="card-foot">
+            Ten sam plik możesz wgrać drugi raz — duplikaty są pomijane (data, kwota, odbiorca, opis), a kategorie
+            zostają.
+          </p>
         </article>
 
-        <article className="card">
-          <h2>Duplikaty i czyszczenie</h2>
-          <p>
-            Drugi import tego samego pliku <strong>nie doda transakcji drugi raz</strong>. Porównanie idzie po dacie,
-            kwocie, odbiorcy i opisie. Istniejące kategorie zostają.
-          </p>
-          <p>
-            Jeśli chcesz najpierw zobaczyć aplikację, wczytaj przykładowe transakcje (Biedronka, Orlen, czynsz,
-            wynagrodzenie).
-          </p>
-          <div className="row">
-            <button
-              className="primary"
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true);
-                setError("");
-                try {
-                  const result = await api.importDemo();
-                  setMessage(
-                    result.imported
-                      ? `Wczytano przykład: ${result.imported} operacji.`
-                      : `Przykład już jest w bazie (pominięto ${result.skipped} duplikatów).`,
-                  );
-                } catch (err) {
-                  setError(err instanceof Error ? err.message : "Nie udało się wczytać przykładu");
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
+        <div className="stack">
+          <article className="card">
+            <h2>Skąd wziąć plik</h2>
+            <ol className="steps">
+              <li>
+                Zaloguj się do <strong>iPKO</strong>.
+              </li>
+              <li>
+                Konto → <strong>Historia operacji</strong>.
+              </li>
+              <li>
+                Ustaw zakres dat → <strong>Pobierz / CSV</strong>.
+              </li>
+              <li>Upuść plik w polu obok.</li>
+            </ol>
+          </article>
+
+          <article className="card">
+            <h2>Chcesz tylko popatrzeć?</h2>
+            <p className="muted">Przykładowe transakcje: Biedronka, Orlen, czynsz, wynagrodzenie.</p>
+            <button className="ghost" type="button" disabled={busy} onClick={() => void loadDemo()}>
+              <Icon name="file" size={16} />
               Wczytaj dane przykładowe
             </button>
-          </div>
-          <div className="row" style={{ marginTop: "0.8rem" }}>
-            <button
-              className="ghost danger"
-              disabled={busy}
-              onClick={async () => {
-                if (!confirm("Usunąć wszystkie transakcje? Kategorie i reguły zostaną.")) return;
-                await api.clear(false);
-                setMessage("Wyczyszczono transakcje.");
-              }}
-            >
-              Wyczyść transakcje
-            </button>
-            <button
-              className="ghost danger"
-              disabled={busy}
-              onClick={async () => {
-                if (!confirm("Usunąć transakcje, kategorie własne i reguły?")) return;
-                await api.clear(true);
-                setMessage("Wyczyszczono całą lokalną bazę wydatków.");
-              }}
-            >
-              Wyczyść wszystko
-            </button>
-          </div>
-        </article>
+          </article>
+
+          <article className="card danger-zone">
+            <h2>Czyszczenie bazy</h2>
+            <p className="muted">Nie da się tego cofnąć.</p>
+            <div className="row">
+              <button className="ghost danger" type="button" disabled={busy} onClick={() => void clear(false)}>
+                Wyczyść transakcje
+              </button>
+              <button className="ghost danger" type="button" disabled={busy} onClick={() => void clear(true)}>
+                Wyczyść wszystko
+              </button>
+            </div>
+          </article>
+        </div>
       </div>
     </section>
   );
