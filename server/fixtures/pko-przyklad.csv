@@ -1,0 +1,49 @@
+"Data operacji","Data waluty","Typ transakcji","Kwota","Waluta","Opis transakcji"
+"2026-09-01","2026-09-01","Przelew na konto","8500,00","PLN","Nazwa nadawcy: FIRMA SP. Z O.O.
+Tytuł: WYNAGRODZENIE ZA SIERPIEŃ 2026"
+"2026-09-02","2026-09-02","Zakup przy użyciu karty","-186,43","PLN","Lokalizacja: BIEDRONKA 5123 WARSZAWA
+Data i czas operacji: 2026-09-02
+Numer karty: 1234********9012"
+"2026-09-03","2026-09-03","Zakup przy użyciu karty","-54,90","PLN","Lokalizacja: ŻABKA 1028 WARSZAWA
+Numer karty: 1234********9012"
+"2026-09-03","2026-09-03","Zakup przy użyciu karty","-247,10","PLN","Lokalizacja: ORLEN STACJA 1542
+Numer karty: 1234********9012"
+"2026-09-04","2026-09-04","Płatność BLIK","-62,00","PLN","Nazwa odbiorcy: GLOVO
+Tytuł: ZAMÓWIENIE JEDZENIA"
+"2026-09-05","2026-09-05","Zakup przy użyciu karty","-32,99","PLN","Lokalizacja: SPOTIFY AB
+Tytuł: PREMIUM SUBSCRIPTION"
+"2026-09-06","2026-09-06","Zakup przy użyciu karty","-49,99","PLN","Lokalizacja: NETFLIX.COM
+Tytuł: STANDARD PLAN"
+"2026-09-07","2026-09-07","Przelew z konta","-2100,00","PLN","Nazwa odbiorcy: SPÓŁDZIELNIA MIESZKANIOWA
+Tytuł: CZYNSZ WRZESIEŃ 2026"
+"2026-09-08","2026-09-08","Zakup przy użyciu karty","-18,50","PLN","Lokalizacja: STARBUCKS COFFEE WARSZAWA
+Numer karty: 1234********9012"
+"2026-09-08","2026-09-08","Zakup przy użyciu karty","-89,00","PLN","Lokalizacja: APTEKA DOZ
+Numer karty: 1234********9012"
+"2026-08-02","2026-08-02","Przelew na konto","8500,00","PLN","Nazwa nadawcy: FIRMA SP. Z O.O.
+Tytuł: WYNAGRODZENIE ZA LIPIEC 2026"
+"2026-08-04","2026-08-04","Zakup przy użyciu karty","-203,12","PLN","Lokalizacja: LIDL WARSZAWA
+Numer karty: 1234********9012"
+"2026-08-06","2026-08-06","Zakup przy użyciu karty","-268,40","PLN","Lokalizacja: BP STACJA PALIW
+Numer karty: 1234********9012"
+"2026-08-10","2026-08-10","Zakup przy użyciu karty","-41,99","PLN","Lokalizacja: HELIOS KINO
+Numer karty: 1234********9012"
+"2026-08-12","2026-08-12","Przelew z konta","-2100,00","PLN","Nazwa odbiorcy: SPÓŁDZIELNIA MIESZKANIOWA
+Tytuł: CZYNSZ SIERPIEŃ 2026"
+"2026-08-15","2026-08-15","Zakup przy użyciu karty","-129,00","PLN","Lokalizacja: RESERVED
+Numer karty: 1234********9012"
+"2026-08-18","2026-08-18","Płatność BLIK","-12,00","PLN","Nazwa odbiorcy: JAKDOJADE
+Tytuł: BILET MIESZANY"
+"2026-08-22","2026-08-22","Zakup przy użyciu karty","-76,20","PLN","Lokalizacja: CARREFOUR EXPRESS
+Numer karty: 1234********9012"
+"2026-07-02","2026-07-02","Przelew na konto","8500,00","PLN","Nazwa nadawcy: FIRMA SP. Z O.O.
+Tytuł: WYNAGRODZENIE ZA CZERWIEC 2026"
+"2026-07-05","2026-07-05","Zakup przy użyciu karty","-154,80","PLN","Lokalizacja: AUCHAN WARSZAWA
+Numer karty: 1234********9012"
+"2026-07-08","2026-07-08","Przelew z konta","-189,00","PLN","Nazwa odbiorcy: ORANGE POLSKA
+Tytuł: ABONAMENT INTERNET + KOMÓRKA"
+"2026-07-11","2026-07-11","Zakup przy użyciu karty","-32,99","PLN","Lokalizacja: SPOTIFY AB"
+"2026-07-14","2026-07-14","Zakup przy użyciu karty","-54,90","PLN","Lokalizacja: MCDONALD'S WARSZAWA"
+"2026-07-20","2026-07-20","Zakup przy użyciu karty","-311,00","PLN","Lokalizacja: ORLEN STACJA 1542"
+"2026-07-25","2026-07-25","Przelew z konta","-2100,00","PLN","Nazwa odbiorcy: SPÓŁDZIELNIA MIESZKANIOWA
+Tytuł: CZYNSZ LIPIEC 2026"
