@@ -137,6 +137,7 @@ export function parsePkoCsv(
   const now = new Date().toISOString();
   const transactions: Transaction[] = [];
   let skippedPending = 0;
+  const seen = new Map<string, number>();
 
   for (const cells of rows.slice(headerIndex + 1)) {
     const row: RawRow = {};
@@ -170,15 +171,19 @@ export function parsePkoCsv(
     const parsedDesc = parseDescription(description);
     const payee = parsedDesc.payee;
     const title = parsedDesc.title;
-    const date = parseDate(dateRaw);
-    const bookingDate = parseDate(pick(row, VALUE_DATE_KEYS) || dateRaw);
+    const operationDate = parseDate(dateRaw);
+    const date = parseDate(pick(row, VALUE_DATE_KEYS) || dateRaw);
     const currency = pick(row, CURRENCY_KEYS) || "PLN";
     const draft = { payee, title, description, type };
+    const baseId = hashId(["csv", operationDate, String(amount), payee, title, type, description.slice(0, 120)]);
+    const repeat = seen.get(baseId) ?? 0;
+    seen.set(baseId, repeat + 1);
+    const id = repeat ? hashId([baseId, String(repeat)]) : baseId;
 
     transactions.push({
-      id: hashId(["csv", date, String(amount), payee, title, type, description.slice(0, 120)]),
+      id,
       date,
-      bookingDate,
+      bookingDate: operationDate,
       amount,
       currency,
       type,
@@ -189,7 +194,7 @@ export function parsePkoCsv(
       category: categorizeWithUserRules(searchText(draft), amount, rules, blocked),
       comment: "",
       source,
-      externalId: hashId(["ext", date, String(amount), payee, type]),
+      externalId: `csv:${id}`,
       createdAt: now,
     });
   }

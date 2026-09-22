@@ -153,16 +153,17 @@ function mapGcTx(raw: GcTransaction, iban: string): Transaction {
   const description = [raw.additionalInformation, raw.remittanceInformationUnstructured]
     .filter(Boolean)
     .join("\n");
-  const date = raw.bookingDate || raw.valueDate || new Date().toISOString().slice(0, 10);
+  const bookingDate = raw.bookingDate || raw.valueDate || new Date().toISOString().slice(0, 10);
+  const date = raw.valueDate || bookingDate;
   const external =
     raw.transactionId ||
     raw.internalTransactionId ||
-    createHash("sha256").update(`${date}|${amount}|${payee}|${title}`).digest("hex").slice(0, 24);
+    createHash("sha256").update(`${bookingDate}|${amount}|${payee}|${title}`).digest("hex").slice(0, 24);
   const draft = { payee, title, description, type: "Open Banking" };
   return {
     id: createHash("sha256").update(`gc|${external}`).digest("hex").slice(0, 24),
     date,
-    bookingDate: raw.valueDate || date,
+    bookingDate,
     amount,
     currency: raw.transactionAmount?.currency || "PLN",
     type: "Open Banking",

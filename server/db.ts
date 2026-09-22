@@ -92,6 +92,19 @@ db.exec(`
   }
 }
 
+{
+  const done = db.prepare("SELECT value FROM settings WHERE key = 'migration.value_date'").get();
+  if (!done) {
+    db.exec(`
+      BEGIN;
+      UPDATE transactions SET date = booking_date, booking_date = date
+        WHERE booking_date IS NOT NULL AND booking_date <> '' AND booking_date <> date;
+      INSERT INTO settings (key, value) VALUES ('migration.value_date', '1');
+      COMMIT;
+    `);
+  }
+}
+
 function rowToTx(row: Record<string, unknown>): Transaction {
   return {
     id: String(row.id),
