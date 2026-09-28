@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { CategorySelect } from "../components/CategorySelect";
 import { CommentNote } from "../components/CommentNote";
+import { ExcludeToggle } from "../components/ExcludeToggle";
 import { Icon } from "../components/Icon";
+import type { Navigate } from "../components/Layout";
 import { PeriodBar, allPeriod, type Period } from "../components/PeriodBar";
-import { formatDay, money } from "../format";
+import { formatDay, money, plural } from "../format";
 import type { Transaction } from "../types";
 
 const OTHER = "Inne";
@@ -24,7 +26,7 @@ function arrow(sort: Sort, field: "date" | "amount" | "category") {
   return sort.endsWith("asc") ? " ↑" : " ↓";
 }
 
-export function Transactions() {
+export function Transactions({ onNavigate }: { onNavigate: Navigate }) {
   const [period, setPeriod] = useState<Period>({ from: "", to: "" });
   const [bounds, setBounds] = useState({ minDate: "", maxDate: "" });
   const [category, setCategory] = useState(ALL);
@@ -40,8 +42,17 @@ export function Transactions() {
   const [info, setInfo] = useState("");
   const [busyAi, setBusyAi] = useState(false);
   const [uncategorized, setUncategorized] = useState(0);
+  const [excludedCount, setExcludedCount] = useState(0);
+  const [excludedOnly, setExcludedOnly] = useState(false);
+  const [hasAiKey, setHasAiKey] = useState(true);
 
-  const filtered = Boolean(q || minAmount || maxAmount || kind !== "all" || category !== ALL);
+  const filtered = Boolean(q || minAmount || maxAmount || kind !== "all" || category !== ALL || excludedOnly);
+
+  function applyMeta(meta: { uncategorized?: number; excluded?: number; hasAiKey?: boolean }) {
+    setUncategorized(meta.uncategorized || 0);
+    setExcludedCount(meta.excluded || 0);
+    setHasAiKey(Boolean(meta.hasAiKey));
+  }
 
   async function load(nextPeriod = period) {
     try {
@@ -53,13 +64,13 @@ export function Transactions() {
         maxAmount,
         kind,
         sort,
+        excludedOnly,
       });
       setItems(data.items);
       setMatched(data.matched);
       setCategories(data.categories);
       setBounds({ minDate: data.minDate, maxDate: data.maxDate });
-      const meta = await api.meta();
-      setUncategorized(meta.uncategorized || 0);
+      applyMeta(await api.meta());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Błąd");
     }
@@ -68,7 +79,7 @@ export function Transactions() {
   useEffect(() => {
     api.meta().then((meta) => {
       setBounds({ minDate: meta.minDate, maxDate: meta.maxDate });
-      setUncategorized(meta.uncategorized || 0);
+      applyMeta(meta);
       setPeriod((current) => (current.from ? current : allPeriod(meta.minDate, meta.maxDate)));
     });
   }, []);
@@ -77,7 +88,7 @@ export function Transactions() {
     if (!period.from && !period.to) return;
     const timer = setTimeout(() => void load(), 150);
     return () => clearTimeout(timer);
-  }, [period.from, period.to, category, q, minAmount, maxAmount, kind, sort]);
+  }, [period.from, period.to, category, q, minAmount, maxAmount, kind, sort, excludedOnly]);
 
   function toggleSort(field: "date" | "amount" | "category") {
     const desc = `${field}_desc` as Sort;
@@ -92,6 +103,24 @@ export function Transactions() {
     setCategory(ALL);
     setMinAmount("");
     setMaxAmount("");
+    setExcludedOnly(false);
+  }
+
+  async function changeExcluded(item: Transaction, excluded: boolean) {
+    setError("");
+    setItems((current) => current.map((row) => (row.id === item.id ? { ...row, excluded } : row)));
+    setExcludedCount((current) => current + (excluded ? 1 : -1));
+    try {
+      await api.setExcluded(item.id, excluded);
+      setInfo(
+        excluded
+          ? `„${item.payee || item.title || "Płatność"}” nie liczy się już do wykresów, limitów ani wydatków.`
+          : `„${item.payee || item.title || "Płatność"}” znów liczy się do statystyk.`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Nie zapisano zmiany");
+      await load();
+    }
   }
 
   async function changeComment(item: Transaction, next: string) {
@@ -114,11 +143,14 @@ export function Transactions() {
         current.includes(next) ? current : [...current.filter((name) => name !== OTHER), next, OTHER],
       );
       if (scope === "merchant") {
-        const who = result.pattern || item.payee || item.title || "tego pośrednika";
+        const who = result.pattern || item.payee || item.title || "tego odbiorcy";
         setInfo(
-          result.updated > 1
-            ? `Kategoria „${next}” dla pośrednika „${who}” — zaktualizowano ${result.updated} płatności.`
-            : `Kategoria „${next}” dla pośrednika „${who}”.`,
+          `Kategoria „${next}” dla wszystkich płatności od „${who}” — zmieniono ${result.updated} ${plural(
+            result.updated,
+            "płatność",
+            "płatności",
+            "płatności",
+          )}. Przyszłe importy też tu trafią.`,
         );
         await load();
       } else {
@@ -138,7 +170,7 @@ export function Transactions() {
       setInfo(
         result.updated
           ? `AI ustawiło kategorię dla ${result.updated} płatności. Zostało ${result.remaining} jako Inne.`
-          : "AI nie znalazło zmian — brak klucza, albo nic nie było w Inne.",
+          : "AI nie znalazło zmian — nic nie pasowało do istniejących kategorii.",
       );
       await load();
     } catch (err) {
@@ -214,11 +246,35 @@ export function Transactions() {
         >
           Nieskategoryzowane <span className="count">{uncategorized}</span>
         </button>
-        {uncategorized ? (
-          <button type="button" className="primary" disabled={busyAi} onClick={() => void categorizeWithAi()}>
-            <Icon name="sparkle" size={16} />
-            {busyAi ? "AI kategoryzuje…" : "Skategoryzuj przez AI"}
+        {excludedCount || excludedOnly ? (
+          <button
+            type="button"
+            className={excludedOnly ? "toggle-chip active" : "toggle-chip"}
+            aria-pressed={excludedOnly}
+            title="Płatności ukryte w statystykach"
+            onClick={() => setExcludedOnly(!excludedOnly)}
+          >
+            <Icon name="eyeOff" size={14} />
+            Ukryte <span className="count">{excludedCount}</span>
           </button>
+        ) : null}
+        {uncategorized ? (
+          hasAiKey ? (
+            <button type="button" className="primary" disabled={busyAi} onClick={() => void categorizeWithAi()}>
+              <Icon name="sparkle" size={16} />
+              {busyAi ? "AI kategoryzuje…" : "Skategoryzuj przez AI"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="ghost ai-setup"
+              title="Kategoryzacja AI wymaga klucza OpenAI"
+              onClick={() => onNavigate("settings", "ai")}
+            >
+              <Icon name="sparkle" size={16} />
+              Ustaw klucz AI, żeby kategoryzować
+            </button>
+          )
         ) : null}
         <span className="result-count">
           {matched} {matched === 1 ? "operacja" : "operacji"}
@@ -242,12 +298,12 @@ export function Transactions() {
                   Data{arrow(sort, "date")}
                 </button>
               </th>
-              <th>Pośrednik / opis</th>
+              <th>Odbiorca / opis</th>
               <th className="col-cat">
                 <button
                   type="button"
                   className={sort.startsWith("category") ? "th-sort active" : "th-sort"}
-                  title="Zmiana na liście dotyczy tylko tej płatności. „Dla pośrednika” ustawia ją też dla pozostałych płatności od tego sklepu."
+                  title="Zmiana na liście dotyczy tylko tej płatności. „Wszystkie od odbiorcy…” ustawia kategorię dla wszystkich płatności od tego odbiorcy, także przyszłych."
                   onClick={() => toggleSort("category")}
                 >
                   Kategoria{arrow(sort, "category")}
@@ -264,7 +320,10 @@ export function Transactions() {
             {items.map((item) => {
               const description = [item.title, item.type].filter(Boolean).join(" · ");
               return (
-                <tr key={item.id} className={item.category === OTHER ? "uncat" : undefined}>
+                <tr
+                  key={item.id}
+                  className={[item.category === OTHER ? "uncat" : "", item.excluded ? "excluded" : ""].join(" ").trim() || undefined}
+                >
                   <td className="tx-date">{formatDay(item.date)}</td>
                   <td className="tx-who">
                     <strong title={item.payee || undefined}>{item.payee || item.type || "Operacja"}</strong>
@@ -275,6 +334,7 @@ export function Transactions() {
                         value={item.comment || ""}
                         onSave={(next) => void changeComment(item, next)}
                       />
+                      <ExcludeToggle compact excluded={item.excluded} onToggle={(next) => void changeExcluded(item, next)} />
                     </div>
                   </td>
                   <td>

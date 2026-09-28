@@ -9,9 +9,11 @@ export type Transaction = {
   title: string;
   description: string;
   accountIban: string;
+  accountId: string;
   category: string;
   comment: string;
-  source: "csv" | "gocardless" | "demo";
+  excluded: boolean;
+  source: "csv" | "gocardless" | "enablebanking" | "demo";
   externalId: string;
   createdAt: string;
 };
@@ -25,7 +27,22 @@ export type TxFilters = {
   maxAmount?: number;
   kind?: "all" | "expense" | "income";
   sort?: "date_desc" | "date_asc" | "amount_desc" | "amount_asc" | "category_asc" | "category_desc";
+  account?: string;
+  includeExcluded?: boolean;
+  excludedOnly?: boolean;
+  weekday?: number;
   limit?: number;
+};
+
+export type RecurringStatus = "auto" | "active" | "ended" | "hidden";
+
+export type AmountBucket = {
+  id: string;
+  label: string;
+  min: number;
+  max: number | null;
+  amount: number;
+  count: number;
 };
 
 export type Stats = {
@@ -37,12 +54,41 @@ export type Stats = {
   byCategory: { category: string; amount: number }[];
   byMonth: { month: string; income: number; expenses: number }[];
   byMonthCategory: { month: string; category: string; amount: number }[];
+  byDayCategory: { date: string; category: string; amount: number }[];
   byWeekday: { id: number; amount: number }[];
-    byAmount: { id: string; label: string; amount: number; count: number }[];
+  byAmount: AmountBucket[];
   count: number;
   totalAll: number;
+  excludedCount: number;
+  excludedSpend: number;
   limitMonths: number;
   limits: CategoryBudget[];
+};
+
+export type Insights = {
+  payees: { name: string; category: string; amount: number; count: number; average: number }[];
+  biggest: Transaction[];
+  recurring: {
+    key: string;
+    name: string;
+    category: string;
+    amount: number;
+    months: number;
+    lastDate: string;
+    active: boolean;
+    autoActive: boolean;
+    status: RecurringStatus;
+  }[];
+  daily: {
+    days: number;
+    average: number;
+    median: number;
+    spendDays: number;
+    noSpendDays: number;
+    weekdayAverage: number;
+    weekendAverage: number;
+    maxDay: { date: string; amount: number } | null;
+  };
 };
 
 export type CategoryBudget = {
@@ -74,4 +120,15 @@ export type PeriodEvaluation = {
   label: string;
   text: string;
   createdAt: string;
+};
+
+export type Account = {
+  id: string;
+  name: string;
+  bank: string;
+  iban: string;
+  provider: "" | "gocardless" | "enablebanking";
+  count: number;
+  minDate: string;
+  maxDate: string;
 };

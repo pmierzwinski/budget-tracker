@@ -9,13 +9,14 @@ import {
   upsertPeriodEvaluation,
   upsertRule,
 } from "./db.ts";
+import { serverEnv } from "./runtime.ts";
 import type { PeriodEvaluation, Transaction, TxFilters } from "./types.ts";
 
 type Assignment = { key: string; category: string };
 
 function aiConfig() {
-  const apiKey = getSetting("openai_api_key") || process.env.OPENAI_API_KEY || "";
-  const baseUrl = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
+  const apiKey = getSetting("openai_api_key") || serverEnv("OPENAI_API_KEY");
+  const baseUrl = (serverEnv("OPENAI_BASE_URL") || "https://api.openai.com/v1").replace(/\/$/, "");
   const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
   return { apiKey, baseUrl, model };
 }
@@ -50,7 +51,7 @@ async function askModel(
 ): Promise<Assignment[]> {
   const { apiKey, baseUrl, model } = aiConfig();
   if (!apiKey) {
-    throw new Error("Brak klucza OpenAI. Wklej go w Kategorie albo ustaw OPENAI_API_KEY w pliku .env.");
+    throw new Error("Brak klucza OpenAI. Wklej go w Ustawienia → AI albo ustaw OPENAI_API_KEY w pliku .env.");
   }
 
   const payload = groups.map((group) => ({
@@ -76,7 +77,7 @@ async function askModel(
         {
           role: "system",
           content:
-            "Jesteś asystentem do kategoryzacji wydatków z polskiego banku PKO. " +
+            "Jesteś asystentem do kategoryzacji wydatków z polskiego konta bankowego. " +
             "Przypisuj kategorie wyłącznie z podanej listy. Jeśli nie jesteś pewien, użyj „Inne”. " +
             'Zwróć JSON: {"assignments":[{"key":"...","category":"..."}]}',
         },
@@ -187,15 +188,18 @@ export function evaluationKey(filters: {
   kind?: string;
   minAmount?: string;
   maxAmount?: string;
+  account?: string;
 }): string {
-  return [
+  const parts = [
     filters.from || "",
     filters.to || "",
     filters.category || "",
     filters.kind && filters.kind !== "all" ? filters.kind : "",
     filters.minAmount || "",
     filters.maxAmount || "",
-  ].join("|");
+  ];
+  if (filters.account) parts.push(filters.account);
+  return parts.join("|");
 }
 
 function viewLabel(filters: { from: string; to: string; category?: string }): string {
@@ -209,7 +213,7 @@ function viewLabel(filters: { from: string; to: string; category?: string }): st
 async function chatJson(system: string, user: string): Promise<unknown> {
   const { apiKey, baseUrl, model } = aiConfig();
   if (!apiKey) {
-    throw new Error("Brak klucza OpenAI. Wklej go w Kategorie albo ustaw OPENAI_API_KEY w pliku .env.");
+    throw new Error("Brak klucza OpenAI. Wklej go w Ustawienia → AI albo ustaw OPENAI_API_KEY w pliku .env.");
   }
 
   const response = await fetch(`${baseUrl}/chat/completions`, {
@@ -254,6 +258,8 @@ export async function evaluateCurrentPeriod(input: {
   maxAmount?: number;
   minAmountRaw?: string;
   maxAmountRaw?: string;
+  account?: string;
+  accountName?: string;
 }): Promise<PeriodEvaluation> {
   const from = input.from.trim();
   const to = input.to.trim();
@@ -266,8 +272,9 @@ export async function evaluateCurrentPeriod(input: {
     kind: input.kind,
     minAmount: input.minAmount,
     maxAmount: input.maxAmount,
+    account: input.account,
   };
-  const periodStats = getStats({ from, to });
+  const periodStats = getStats({ from, to, account: input.account });
   if (!periodStats.count) throw new Error("Brak transakcji w tym okresie.");
 
   const listed = listTransactions({
@@ -317,7 +324,7 @@ export async function evaluateCurrentPeriod(input: {
   };
 
   const parsed = (await chatJson(
-    "Jesteś trzeźwym komentatorem domowego budżetu w Polsce, na podstawie historii z PKO. " +
+    "Jesteś trzeźwym komentatorem domowego budżetu w Polsce, na podstawie historii konta bankowego. " +
       "Najpierw oceń cały okres, który użytkownik ma ustawiony (sumy, kategorie, czy na plus/minus). " +
       "Potem wskaż konkretne wydatki z listy visible.transactions (nazwa + kwota), które odstają albo zjadają kasę. " +
       "Pisz po polsku, 4–8 zdań. Zero ogólników, motywacyjnego tonu i rad typu „warto oszczędzać”. " +
@@ -337,10 +344,11 @@ export async function evaluateCurrentPeriod(input: {
       kind: input.kind,
       minAmount: input.minAmountRaw,
       maxAmount: input.maxAmountRaw,
+      account: input.account,
     }),
     from,
     to,
-    label: viewLabel({ from, to, category: input.category }),
+    label: `${viewLabel({ from, to, category: input.category })}${input.accountName ? ` · ${input.accountName}` : ""}`,
     text,
     createdAt: new Date().toISOString(),
   });

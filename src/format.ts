@@ -134,15 +134,18 @@ export function isMonthEnd(iso: string): boolean {
 export function evaluationKey(
   period: { from: string; to: string },
   filters?: { category?: string; kind?: string; minAmount?: string; maxAmount?: string },
+  account?: string,
 ): string {
-  return [
+  const parts = [
     period.from || "",
     period.to || "",
     filters?.category || "",
     filters?.kind && filters.kind !== "all" ? filters.kind : "",
     filters?.minAmount || "",
     filters?.maxAmount || "",
-  ].join("|");
+  ];
+  if (account) parts.push(account);
+  return parts.join("|");
 }
 
 export function monthSpan(period: { from: string; to: string }): number {
@@ -220,6 +223,14 @@ export function previousComparable(
   };
 }
 
+export function plural(count: number, one: string, few: string, many: string): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (count === 1) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+  return many;
+}
+
 export function percent(part: number, total: number): string {
   if (!total) return "0%";
   return `${((part / total) * 100).toLocaleString("pl-PL", { maximumFractionDigits: 1 })}%`;
@@ -241,6 +252,8 @@ export function shortMonthTick(month: string): string {
 
 export const WEEKDAY_LABELS = ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"];
 
+export const WEEKDAY_NAMES = ["Poniedziałki", "Wtorki", "Środy", "Czwartki", "Piątki", "Soboty", "Niedziele"];
+
 export const CATEGORY_COLORS: Record<string, string> = {
   Spożywcze: "#2F6F4E",
   "Jedzenie na mieście": "#C45C4A",
@@ -256,7 +269,6 @@ export const CATEGORY_COLORS: Record<string, string> = {
   Finanse: "#5C6370",
   Przelewy: "#7A6A4F",
   Wynagrodzenie: "#1F7A4D",
-  "Poza statystykami": "#B7AFA3",
   Inne: "#8A8175",
 };
 
@@ -269,12 +281,89 @@ export function categoryColor(name: string): string {
   return FALLBACK[hash % FALLBACK.length];
 }
 
-export const AMOUNT_BUCKET_QUERY: Record<string, { minAmount?: string; maxAmount?: string }> = {
-  gt500: { minAmount: "500" },
-  "300-500": { minAmount: "300", maxAmount: "499.99" },
-  "100-300": { minAmount: "100", maxAmount: "299.99" },
-  lt100: { maxAmount: "99.99" },
-};
+export function bucketQuery(bucket?: { min: number; max: number | null }): { minAmount?: string; maxAmount?: string } {
+  if (!bucket) return {};
+  return {
+    ...(bucket.min > 0 ? { minAmount: String(bucket.min) } : {}),
+    ...(bucket.max != null ? { maxAmount: String(Math.round((bucket.max - 0.01) * 100) / 100) } : {}),
+  };
+}
+
+export type Granularity = "day" | "week" | "month";
+
+export const GRANULARITY_LABELS: Record<Granularity, string> = { day: "Dzień", week: "Tydzień", month: "Miesiąc" };
+
+export function autoGranularity(period: { from: string; to: string }, isAll: boolean): Granularity {
+  if (!period.from || !period.to) return "month";
+  if (isAll) return "month";
+  const days = dayCount(period);
+  if (days <= 92) return "day";
+  if (days <= 365) return "week";
+  return "month";
+}
+
+export type TimeBucket = { key: string; from: string; to: string; label: string; tick: string };
+
+function mondayOf(iso: string): string {
+  const date = parseIso(iso);
+  const shift = (date.getDay() + 6) % 7;
+  date.setDate(date.getDate() - shift);
+  return isoDate(date);
+}
+
+export function bucketKey(iso: string, granularity: Granularity): string {
+  if (granularity === "month") return iso.slice(0, 7);
+  if (granularity === "week") return mondayOf(iso);
+  return iso.slice(0, 10);
+}
+
+function dayTick(iso: string): string {
+  return `${iso.slice(8, 10)}.${iso.slice(5, 7)}`;
+}
+
+export function buildBuckets(from: string, to: string, granularity: Granularity): TimeBucket[] {
+  if (!from || !to || from > to) return [];
+  const buckets: TimeBucket[] = [];
+  if (granularity === "month") {
+    let month = from.slice(0, 7);
+    for (let guard = 0; month <= to.slice(0, 7) && guard < 600; guard += 1) {
+      const range = monthRange(month);
+      buckets.push({
+        key: month,
+        from: range.from < from ? from : range.from,
+        to: range.to > to ? to : range.to,
+        label: monthLabel(month),
+        tick: shortMonthTick(month),
+      });
+      month = shiftMonth(month, 1);
+    }
+    return buckets;
+  }
+  if (granularity === "week") {
+    let start = mondayOf(from);
+    for (let guard = 0; start <= to && guard < 600; guard += 1) {
+      const end = addDays(start, 6);
+      const clippedFrom = start < from ? from : start;
+      const clippedTo = end > to ? to : end;
+      buckets.push({
+        key: start,
+        from: clippedFrom,
+        to: clippedTo,
+        label: `Tydzień ${rangeLabel(clippedFrom, clippedTo)}`,
+        tick: dayTick(start),
+      });
+      start = addDays(start, 7);
+    }
+    return buckets;
+  }
+  let day = from;
+  for (let guard = 0; day <= to && guard < 4000; guard += 1) {
+    const weekday = parseIso(day).toLocaleDateString("pl-PL", { weekday: "short" });
+    buckets.push({ key: day, from: day, to: day, label: `${formatDay(day)} · ${weekday}`, tick: dayTick(day) });
+    day = addDays(day, 1);
+  }
+  return buckets;
+}
 
 export function suggestPattern(text: string): string {
   const cleaned = text.replace(/^www\./i, "").replace(/^https?:\/\//i, "").trim();

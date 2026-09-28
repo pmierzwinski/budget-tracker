@@ -1,25 +1,65 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { appRoot, hosted } from "./runtime.ts";
 import {
   BUILTIN_CATEGORIES,
   DEFAULT_CATEGORY,
-  SKIP_STATS_CATEGORY,
+  LEGACY_SKIP_CATEGORY,
   categorizeWithUserRules,
   searchText,
   suggestPattern,
 } from "./categorize.ts";
-import type { CategoryBudget, CategoryLimitSetting, CategoryRule, PeriodEvaluation, Stats, Transaction, TxFilters } from "./types.ts";
+import type {
+  Account,
+  AmountBucket,
+  CategoryBudget,
+  CategoryLimitSetting,
+  CategoryRule,
+  Insights,
+  PeriodEvaluation,
+  RecurringStatus,
+  Stats,
+  Transaction,
+  TxFilters,
+} from "./types.ts";
 
-const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const dataDir = join(root, "data");
-mkdirSync(dataDir, { recursive: true });
+const dataDir = join(appRoot, "data");
+const scope = new AsyncLocalStorage<DatabaseSync>();
+let fileDb: DatabaseSync | null = null;
 
-export const db = new DatabaseSync(join(dataDir, "wydatki.db"));
+function currentDb(): DatabaseSync {
+  const scoped = scope.getStore();
+  if (scoped) return scoped;
+  if (hosted) throw new Error("Sesja wygasła — odśwież stronę.");
+  if (!fileDb) {
+    mkdirSync(dataDir, { recursive: true });
+    fileDb = openDatabase(join(dataDir, "wydatki.db"));
+  }
+  return fileDb;
+}
 
-db.exec(`
+const db = new Proxy({} as DatabaseSync, {
+  get(_target, prop) {
+    const target = currentDb();
+    const value = Reflect.get(target, prop, target);
+    return typeof value === "function" ? value.bind(target) : value;
+  },
+});
+
+export function openDatabase(path = ":memory:"): DatabaseSync {
+  const database = new DatabaseSync(path);
+  scope.run(database, initSchema);
+  return database;
+}
+
+export function withDatabase<T>(database: DatabaseSync, fn: () => T): T {
+  return scope.run(database, fn);
+}
+
+const SCHEMA = `
   CREATE TABLE IF NOT EXISTS transactions (
     id TEXT PRIMARY KEY,
     date TEXT NOT NULL,
@@ -55,6 +95,16 @@ db.exec(`
     requisition_id TEXT
   );
 
+  CREATE TABLE IF NOT EXISTS accounts (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    bank TEXT NOT NULL DEFAULT '',
+    iban TEXT NOT NULL DEFAULT '',
+    provider TEXT NOT NULL DEFAULT '',
+    external_id TEXT NOT NULL DEFAULT '',
+    created_at TEXT
+  );
+
   CREATE TABLE IF NOT EXISTS custom_categories (
     name TEXT PRIMARY KEY
   );
@@ -83,18 +133,28 @@ db.exec(`
     category TEXT PRIMARY KEY,
     monthly_limit REAL NOT NULL
   );
-`);
+`;
 
-{
+function migrateColumns(): void {
   const cols = db.prepare("PRAGMA table_info(transactions)").all() as { name: string }[];
   if (!cols.some((col) => col.name === "comment")) {
     db.exec("ALTER TABLE transactions ADD COLUMN comment TEXT NOT NULL DEFAULT ''");
   }
+  if (!cols.some((col) => col.name === "excluded")) {
+    db.exec("ALTER TABLE transactions ADD COLUMN excluded INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!cols.some((col) => col.name === "account_id")) {
+    db.exec("ALTER TABLE transactions ADD COLUMN account_id TEXT NOT NULL DEFAULT ''");
+  }
+  db.exec("CREATE INDEX IF NOT EXISTS idx_tx_account ON transactions(account_id)");
 }
 
-{
-  const done = db.prepare("SELECT value FROM settings WHERE key = 'migration.value_date'").get();
-  if (!done) {
+function migrationDone(key: string): boolean {
+  return Boolean(db.prepare("SELECT value FROM settings WHERE key = ?").get(key));
+}
+
+function migrateValueDate(): void {
+  if (!migrationDone("migration.value_date")) {
     db.exec(`
       BEGIN;
       UPDATE transactions SET date = booking_date, booking_date = date
@@ -103,6 +163,67 @@ db.exec(`
       COMMIT;
     `);
   }
+}
+
+function migrateSkipFlag(): void {
+  if (!migrationDone("migration.skip_flag")) {
+    const rules = listRules().filter((rule) => rule.category !== LEGACY_SKIP_CATEGORY);
+    const blocked = new Set([...hiddenCategoryNames(), LEGACY_SKIP_CATEGORY]);
+    const rows = db.prepare("SELECT * FROM transactions WHERE category = ?").all(LEGACY_SKIP_CATEGORY) as Record<
+      string,
+      unknown
+    >[];
+    const update = db.prepare("UPDATE transactions SET excluded = 1, category = ? WHERE id = ?");
+    db.exec("BEGIN");
+    try {
+      for (const row of rows) {
+        const tx = rowToTx(row);
+        update.run(categorizeWithUserRules(searchText(tx), tx.amount, rules, blocked), tx.id);
+      }
+      db.prepare("UPDATE category_rules SET category = ? WHERE category = ?").run(DEFAULT_CATEGORY, LEGACY_SKIP_CATEGORY);
+      db.prepare("DELETE FROM category_limits WHERE category = ?").run(LEGACY_SKIP_CATEGORY);
+      db.prepare("DELETE FROM custom_categories WHERE name = ?").run(LEGACY_SKIP_CATEGORY);
+      db.prepare("INSERT INTO settings (key, value) VALUES ('migration.skip_flag', '1')").run();
+      db.exec("COMMIT");
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+}
+
+function migrateAccounts(): void {
+  if (!migrationDone("migration.accounts")) {
+    const orphans = Number(
+      (db.prepare("SELECT COUNT(*) AS n FROM transactions WHERE account_id = ''").get() as { n: number }).n,
+    );
+    db.exec("BEGIN");
+    try {
+      if (orphans) {
+        const id = randomUUID();
+        db.prepare("INSERT INTO accounts (id, name, bank, created_at) VALUES (?, ?, ?, ?)").run(
+          id,
+          "PKO BP",
+          "pko",
+          new Date().toISOString(),
+        );
+        db.prepare("UPDATE transactions SET account_id = ? WHERE account_id = ''").run(id);
+      }
+      db.prepare("INSERT INTO settings (key, value) VALUES ('migration.accounts', '1')").run();
+      db.exec("COMMIT");
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+}
+
+function initSchema(): void {
+  db.exec(SCHEMA);
+  migrateColumns();
+  migrateValueDate();
+  migrateSkipFlag();
+  migrateAccounts();
 }
 
 function rowToTx(row: Record<string, unknown>): Transaction {
@@ -117,8 +238,10 @@ function rowToTx(row: Record<string, unknown>): Transaction {
     title: String(row.title ?? ""),
     description: String(row.description ?? ""),
     accountIban: String(row.account_iban ?? ""),
+    accountId: String(row.account_id ?? ""),
     category: String(row.category || DEFAULT_CATEGORY),
     comment: String(row.comment ?? ""),
+    excluded: Number(row.excluded || 0) === 1,
     source: (row.source as Transaction["source"]) || "csv",
     externalId: String(row.external_id ?? ""),
     createdAt: String(row.created_at ?? ""),
@@ -127,19 +250,20 @@ function rowToTx(row: Record<string, unknown>): Transaction {
 
 export function insertTransactions(
   items: Transaction[],
-  options: { replaceCsv?: boolean } = {},
+  options: { replaceCsvFor?: string } = {},
 ): { imported: number; skipped: number; ids: string[] } {
   const insert = db.prepare(`
     INSERT OR IGNORE INTO transactions
-    (id, date, booking_date, amount, currency, type, payee, title, description, account_iban, category, comment, source, external_id, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (id, date, booking_date, amount, currency, type, payee, title, description, account_iban, account_id,
+     category, comment, excluded, source, external_id, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   let imported = 0;
   const ids: string[] = [];
   db.exec("BEGIN");
   try {
-    if (options.replaceCsv) {
-      db.exec("DELETE FROM transactions WHERE source = 'csv'");
+    if (options.replaceCsvFor) {
+      db.prepare("DELETE FROM transactions WHERE source = 'csv' AND account_id = ?").run(options.replaceCsvFor);
     }
     for (const item of items) {
       const result = insert.run(
@@ -153,8 +277,10 @@ export function insertTransactions(
         item.title,
         item.description,
         item.accountIban,
+        item.accountId,
         item.category,
         item.comment || "",
+        item.excluded ? 1 : 0,
         item.source,
         item.externalId,
         item.createdAt,
@@ -174,6 +300,10 @@ export function insertTransactions(
 function filterClause(filters: TxFilters): { where: string; params: (string | number)[] } {
   const where: string[] = ["1=1"];
   const params: (string | number)[] = [];
+  if (filters.account) {
+    where.push("account_id = ?");
+    params.push(filters.account);
+  }
   if (filters.from) {
     where.push("date >= ?");
     params.push(filters.from);
@@ -202,6 +332,11 @@ function filterClause(filters: TxFilters): { where: string; params: (string | nu
   }
   if (filters.kind === "expense") where.push("amount < 0");
   if (filters.kind === "income") where.push("amount > 0");
+  if (filters.excludedOnly) where.push("excluded = 1");
+  if (filters.weekday != null && filters.weekday >= 0 && filters.weekday <= 6) {
+    where.push("CAST(strftime('%w', date) AS INTEGER) = ?");
+    params.push(filters.weekday);
+  }
   if (filters.minAmount != null && !Number.isNaN(filters.minAmount)) {
     where.push("ABS(amount) >= ?");
     params.push(filters.minAmount);
@@ -235,15 +370,16 @@ export function listTransactions(filters: TxFilters): { items: Transaction[]; ma
   return { items: rows.map(rowToTx), matched };
 }
 
-export function updateCategory(id: string, category: string): void {
-  applyCategory(id, category, { onlyThis: true });
-}
-
 export function updateComment(id: string, comment: string): string {
   const next = comment.trim().slice(0, 80);
   const result = db.prepare("UPDATE transactions SET comment = ? WHERE id = ?").run(next, id);
   if (!Number(result.changes || 0)) throw new Error("Nie znaleziono transakcji");
   return next;
+}
+
+export function setExcluded(id: string, excluded: boolean): void {
+  const result = db.prepare("UPDATE transactions SET excluded = ? WHERE id = ?").run(excluded ? 1 : 0, id);
+  if (!Number(result.changes || 0)) throw new Error("Nie znaleziono transakcji");
 }
 
 export function applyCategory(
@@ -273,18 +409,82 @@ export function applyCategory(
   return { updated: Math.max(updated, 1), pattern };
 }
 
-const AMOUNT_BUCKETS = [
-  { id: "gt500", label: ">500 zł", min: 500, max: Number.POSITIVE_INFINITY },
-  { id: "300-500", label: "300–500 zł", min: 300, max: 500 },
-  { id: "100-300", label: "100–300 zł", min: 100, max: 300 },
-  { id: "lt100", label: "<100 zł", min: 0, max: 100 },
-] as const;
+const DEFAULT_THRESHOLDS = [100, 200, 300, 500];
 
-function amountBucket(spent: number): string {
-  if (spent >= 500) return "gt500";
-  if (spent >= 300) return "300-500";
-  if (spent >= 100) return "100-300";
-  return "lt100";
+export function amountThresholds(): number[] {
+  const raw = getSetting("amount_buckets");
+  if (!raw) return DEFAULT_THRESHOLDS;
+  const values = raw
+    .split(",")
+    .map((part) => Number(part))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  return values.length ? [...new Set(values)].sort((a, b) => a - b) : DEFAULT_THRESHOLDS;
+}
+
+export function setAmountThresholds(values: number[]): number[] {
+  const clean = [...new Set(values.map((value) => Math.round(value * 100) / 100))]
+    .filter((value) => Number.isFinite(value) && value > 0)
+    .sort((a, b) => a - b);
+  if (!clean.length) throw new Error("Podaj co najmniej jeden próg kwoty.");
+  if (clean.length > 9) throw new Error("Maksymalnie 9 progów — wykres robi się nieczytelny.");
+  setSetting("amount_buckets", clean.join(","));
+  return clean;
+}
+
+const RECURRING_STATUSES: RecurringStatus[] = ["auto", "active", "ended", "hidden"];
+
+function getRecurringOverrides(): Record<string, RecurringStatus> {
+  try {
+    const parsed = JSON.parse(getSetting("recurring_overrides") || "{}") as Record<string, string>;
+    const clean: Record<string, RecurringStatus> = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      if (RECURRING_STATUSES.includes(value as RecurringStatus) && value !== "auto") clean[key] = value as RecurringStatus;
+    }
+    return clean;
+  } catch {
+    return {};
+  }
+}
+
+const RECURRING_ORDER: Record<RecurringStatus, number> = { auto: 0, active: 1, ended: 2, hidden: 3 };
+
+function compareRecurring(a: Insights["recurring"][number], b: Insights["recurring"][number]): number {
+  return (
+    RECURRING_ORDER[a.status] - RECURRING_ORDER[b.status] ||
+    Number(b.active) - Number(a.active) ||
+    b.amount - a.amount
+  );
+}
+
+export function setRecurringStatus(key: string, status: RecurringStatus): void {
+  const clean = key.trim().toLowerCase();
+  if (!clean) throw new Error("Brak nazwy płatności cyklicznej.");
+  if (!RECURRING_STATUSES.includes(status)) throw new Error("Nieznany status płatności cyklicznej.");
+  const overrides = getRecurringOverrides();
+  if (status === "auto") delete overrides[clean];
+  else overrides[clean] = status;
+  setSetting("recurring_overrides", JSON.stringify(overrides));
+}
+
+function formatZl(value: number): string {
+  return value.toLocaleString("pl-PL", { maximumFractionDigits: 2 });
+}
+
+function amountBuckets(): Omit<AmountBucket, "amount" | "count">[] {
+  const thresholds = amountThresholds();
+  const buckets: Omit<AmountBucket, "amount" | "count">[] = [];
+  let min = 0;
+  for (const max of thresholds) {
+    buckets.push({
+      id: `${min}-${max}`,
+      label: min === 0 ? `<${formatZl(max)} zł` : `${formatZl(min)}–${formatZl(max)} zł`,
+      min,
+      max,
+    });
+    min = max;
+  }
+  buckets.push({ id: `${min}-`, label: `>${formatZl(min)} zł`, min, max: null });
+  return buckets;
 }
 
 function scrubHiddenCategories(): void {
@@ -296,32 +496,40 @@ function scrubHiddenCategories(): void {
 
 export function getStats(filters: TxFilters): Stats {
   scrubHiddenCategories();
-  const hidden = hiddenCategoryNames();
   const { where, params } = filterClause(filters);
-  const monthRows = db
-    .prepare(`SELECT amount, category, date FROM transactions WHERE ${where}`)
-    .all(...params) as { amount: number; category: string; date: string }[];
+  const rows = db
+    .prepare(`SELECT amount, category, date, excluded FROM transactions WHERE ${where}`)
+    .all(...params) as { amount: number; category: string; date: string; excluded: number }[];
 
   let income = 0;
   let expenses = 0;
+  let excludedCount = 0;
+  let excludedSpend = 0;
   const catMap = new Map<string, number>();
+  const monthCat = new Map<string, number>();
+  const dayCat = new Map<string, number>();
   const weekdaySpend = [0, 0, 0, 0, 0, 0, 0];
-  const amountMap = new Map<string, { amount: number; count: number }>(
-    AMOUNT_BUCKETS.map((bucket) => [bucket.id, { amount: 0, count: 0 }]),
-  );
-  for (const row of monthRows) {
+  const buckets = amountBuckets().map((bucket) => ({ ...bucket, amount: 0, count: 0 }));
+  for (const row of rows) {
     const category = row.category || DEFAULT_CATEGORY;
-    if (category === SKIP_STATS_CATEGORY || hidden.has(category)) continue;
+    if (row.excluded) {
+      excludedCount += 1;
+      if (row.amount < 0) excludedSpend += -row.amount;
+      if (!filters.includeExcluded) continue;
+    }
     catMap.set(category, (catMap.get(category) || 0) + row.amount);
+    const monthKey = `${row.date.slice(0, 7)}|${category}`;
+    monthCat.set(monthKey, (monthCat.get(monthKey) || 0) + row.amount);
+    const dayKey = `${row.date.slice(0, 10)}|${category}`;
+    dayCat.set(dayKey, (dayCat.get(dayKey) || 0) + row.amount);
     if (row.amount >= 0) income += row.amount;
     else {
       const spent = -row.amount;
       expenses += spent;
-      const bucket = amountBucket(spent);
-      const current = amountMap.get(bucket);
-      if (current) {
-        current.amount += spent;
-        current.count += 1;
+      const bucket = buckets.find((item) => spent >= item.min && (item.max == null || spent < item.max));
+      if (bucket) {
+        bucket.amount += spent;
+        bucket.count += 1;
       }
       const [year, month, day] = row.date.split("-").map(Number);
       if (year && month && day) {
@@ -342,30 +550,16 @@ export function getStats(filters: TxFilters): Stats {
     )
     .all(...params) as { month: string; income: number; expenses: number }[];
 
-  const hiddenList = [...hidden];
-  const hiddenSql = hiddenList.length
-    ? `AND COALESCE(NULLIF(category, ''), 'Inne') NOT IN (${hiddenList.map(() => "?").join(",")})`
-    : "";
-  const byMonthCategoryRows = db
-    .prepare(
-      `SELECT substr(date, 1, 7) AS month,
-              COALESCE(NULLIF(category, ''), 'Inne') AS category,
-              SUM(amount) AS net
-       FROM transactions
-       WHERE ${where}
-         AND COALESCE(NULLIF(category, ''), 'Inne') != ?
-         ${hiddenSql}
-       GROUP BY substr(date, 1, 7), COALESCE(NULLIF(category, ''), 'Inne')
-       HAVING ABS(net) > 0.004
-       ORDER BY month ASC`,
-    )
-    .all(...params, SKIP_STATS_CATEGORY, ...hiddenList) as {
-    month: string;
-    category: string;
-    net: number;
-  }[];
+  const splitKey = <K extends string>(map: Map<string, number>, name: K) =>
+    [...map.entries()]
+      .filter(([, net]) => Math.abs(net) > 0.004)
+      .map(([key, net]) => {
+        const [bucket, category] = key.split("|");
+        return { [name]: bucket, category, amount: -net } as Record<K, string> & { category: string; amount: number };
+      })
+      .sort((a, b) => (a[name] < b[name] ? -1 : a[name] > b[name] ? 1 : 0));
 
-  const bounds = dateBounds();
+  const bounds = dateBounds(filters.account);
   const from = filters.from || bounds.minDate || "";
   const to = filters.to || bounds.maxDate || "";
   const factor = periodMonthFactor(from, to);
@@ -379,33 +573,172 @@ export function getStats(filters: TxFilters): Stats {
       .map(([category, amount]) => ({ category, amount }))
       .sort((a, b) => a.amount - b.amount),
     byMonth: byMonthRows,
-    byMonthCategory: byMonthCategoryRows.map((row) => ({
-      month: row.month,
-      category: row.category,
-      amount: -row.net,
-    })),
+    byMonthCategory: splitKey(monthCat, "month"),
+    byDayCategory: splitKey(dayCat, "date"),
     byWeekday: [1, 2, 3, 4, 5, 6, 0].map((jsDay) => ({
       id: jsDay,
       amount: weekdaySpend[jsDay],
     })),
-    byAmount: AMOUNT_BUCKETS.map((bucket) => ({
-      id: bucket.id,
-      label: bucket.label,
-      amount: amountMap.get(bucket.id)?.amount || 0,
-      count: amountMap.get(bucket.id)?.count || 0,
-    })),
-    count: monthRows.length,
-    totalAll: countTransactions(),
+    byAmount: buckets,
+    count: rows.length,
+    totalAll: countTransactions(filters.account),
+    excludedCount,
+    excludedSpend,
     limitMonths: factor,
-    limits: buildCategoryBudgets(catMap, factor, hidden),
+    limits: buildCategoryBudgets(catMap, factor, hiddenCategoryNames()),
   };
 }
 
-export function dateBounds(): { minDate: string; maxDate: string } {
-  const row = db.prepare("SELECT MIN(date) AS minDate, MAX(date) AS maxDate FROM transactions").get() as {
-    minDate: string | null;
-    maxDate: string | null;
+function median(values: number[]): number {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function mostCommon(values: string[]): string {
+  const counts = new Map<string, number>();
+  for (const value of values) counts.set(value, (counts.get(value) || 0) + 1);
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "";
+}
+
+function isoDay(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function monthIndex(iso: string): number {
+  return Number(iso.slice(0, 4)) * 12 + Number(iso.slice(5, 7)) - 1;
+}
+
+export function getInsights(filters: TxFilters): Insights {
+  const base: TxFilters = { from: filters.from, to: filters.to, account: filters.account, kind: "expense" };
+  const { where, params } = filterClause(base);
+  const excludedSql = filters.includeExcluded ? "" : " AND excluded = 0";
+  const rows = (
+    db.prepare(`SELECT * FROM transactions WHERE ${where}${excludedSql}`).all(...params) as Record<string, unknown>[]
+  ).map(rowToTx);
+
+  const groups = new Map<string, Transaction[]>();
+  for (const tx of rows) {
+    const key = (tx.payee || tx.title || tx.type || "Operacja").replace(/\s+/g, " ").trim().toLowerCase();
+    groups.set(key, [...(groups.get(key) || []), tx]);
+  }
+  const payees = [...groups.values()]
+    .map((items) => {
+      const amount = items.reduce((sum, tx) => sum - tx.amount, 0);
+      return {
+        name: mostCommon(items.map((tx) => (tx.payee || tx.title || tx.type || "Operacja").replace(/\s+/g, " ").trim())),
+        category: mostCommon(items.map((tx) => tx.category)),
+        amount,
+        count: items.length,
+        average: amount / items.length,
+      };
+    })
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 10);
+
+  const biggest = [...rows].sort((a, b) => a.amount - b.amount).slice(0, 8);
+
+  const bounds = dateBounds(filters.account);
+  const from = filters.from || bounds.minDate;
+  const lastData = [bounds.maxDate, isoDay(new Date())].filter(Boolean).sort().pop() || "";
+  const to = [filters.to || bounds.maxDate, lastData].filter(Boolean).sort()[0] || "";
+  const spendByDay = new Map<string, number>();
+  for (const tx of rows) spendByDay.set(tx.date, (spendByDay.get(tx.date) || 0) - tx.amount);
+  const daily: number[] = [];
+  let weekdaySum = 0;
+  let weekdayDays = 0;
+  let weekendSum = 0;
+  let weekendDays = 0;
+  let maxDay: Insights["daily"]["maxDay"] = null;
+  if (from && to && from <= to) {
+    const cursor = new Date(Number(from.slice(0, 4)), Number(from.slice(5, 7)) - 1, Number(from.slice(8, 10)));
+    for (let guard = 0; guard < 4000; guard += 1) {
+      const iso = isoDay(cursor);
+      if (iso > to) break;
+      const spent = spendByDay.get(iso) || 0;
+      daily.push(spent);
+      const weekend = cursor.getDay() === 0 || cursor.getDay() === 6;
+      if (weekend) {
+        weekendSum += spent;
+        weekendDays += 1;
+      } else {
+        weekdaySum += spent;
+        weekdayDays += 1;
+      }
+      if (spent > 0 && (!maxDay || spent > maxDay.amount)) maxDay = { date: iso, amount: spent };
+      cursor.setDate(cursor.getDate() + 1);
+    }
+  }
+  const total = daily.reduce((sum, value) => sum + value, 0);
+  const spendDays = daily.filter((value) => value > 0.004).length;
+
+  const history = (
+    db
+      .prepare(
+        `SELECT * FROM transactions WHERE amount < 0 AND excluded = 0${filters.account ? " AND account_id = ?" : ""}`,
+      )
+      .all(...(filters.account ? [filters.account] : [])) as Record<string, unknown>[]
+  ).map(rowToTx);
+  const byMerchant = new Map<string, Transaction[]>();
+  for (const tx of history) {
+    const key = suggestPattern(tx.payee || tx.title || tx.type).toLowerCase();
+    if (key.length < 2) continue;
+    byMerchant.set(key, [...(byMerchant.get(key) || []), tx]);
+  }
+  const recurring: Insights["recurring"] = [];
+  const activeSince = bounds.maxDate ? monthIndex(bounds.maxDate) - 1 : 0;
+  const overrides = getRecurringOverrides();
+  for (const [key, items] of byMerchant) {
+    const months = new Set(items.map((tx) => tx.date.slice(0, 7)));
+    if (months.size < 3) continue;
+    const sortedMonths = [...months].sort();
+    const span = monthIndex(sortedMonths[sortedMonths.length - 1]) - monthIndex(sortedMonths[0]) + 1;
+    if (months.size / span < 0.7 || items.length / months.size > 1.6) continue;
+    const amounts = items.map((tx) => -tx.amount);
+    const typical = median(amounts);
+    const steady = amounts.filter((value) => Math.abs(value - typical) <= Math.max(typical * 0.2, 2)).length;
+    if (steady / amounts.length < 0.7) continue;
+    const lastDate = items.map((tx) => tx.date).sort().pop() || "";
+    const autoActive = monthIndex(lastDate) >= activeSince;
+    const status = overrides[key] || "auto";
+    recurring.push({
+      key,
+      name: mostCommon(items.map((tx) => (tx.payee || tx.title || tx.type).replace(/\s+/g, " ").trim())),
+      category: mostCommon(items.map((tx) => tx.category)),
+      amount: typical,
+      months: months.size,
+      lastDate,
+      active: status === "auto" ? autoActive : status === "active",
+      autoActive,
+      status,
+    });
+  }
+  recurring.sort(compareRecurring);
+
+  return {
+    payees,
+    biggest,
+    recurring: recurring.slice(0, 40),
+    daily: {
+      days: daily.length,
+      average: daily.length ? total / daily.length : 0,
+      median: median(daily),
+      spendDays,
+      noSpendDays: daily.length - spendDays,
+      weekdayAverage: weekdayDays ? weekdaySum / weekdayDays : 0,
+      weekendAverage: weekendDays ? weekendSum / weekendDays : 0,
+      maxDay,
+    },
   };
+}
+
+export function dateBounds(account?: string): { minDate: string; maxDate: string } {
+  const row = (
+    account
+      ? db.prepare("SELECT MIN(date) AS minDate, MAX(date) AS maxDate FROM transactions WHERE account_id = ?").get(account)
+      : db.prepare("SELECT MIN(date) AS minDate, MAX(date) AS maxDate FROM transactions").get()
+  ) as { minDate: string | null; maxDate: string | null };
   return { minDate: row.minDate || "", maxDate: row.maxDate || "" };
 }
 
@@ -437,6 +770,7 @@ export function ensureCategory(name: string): void {
 export function addCustomCategory(name: string): string {
   const trimmed = name.trim();
   if (!trimmed) throw new Error("Podaj nazwę kategorii");
+  if (trimmed.length > 40) throw new Error("Nazwa może mieć najwyżej 40 znaków.");
   ensureCategory(trimmed);
   return trimmed;
 }
@@ -516,10 +850,19 @@ export function listUncategorized(ids?: string[]): Transaction[] {
   return rows.map(rowToTx);
 }
 
-export function countUncategorized(): number {
-  const row = db
-    .prepare("SELECT COUNT(*) AS n FROM transactions WHERE category = ? OR category = '' OR category IS NULL")
-    .get(DEFAULT_CATEGORY) as { n: number };
+export function countUncategorized(account?: string): number {
+  const sql = "SELECT COUNT(*) AS n FROM transactions WHERE (category = ? OR category = '' OR category IS NULL)";
+  const row = (
+    account
+      ? db.prepare(`${sql} AND account_id = ?`).get(DEFAULT_CATEGORY, account)
+      : db.prepare(sql).get(DEFAULT_CATEGORY)
+  ) as { n: number };
+  return Number(row.n);
+}
+
+export function countExcluded(account?: string): number {
+  const sql = "SELECT COUNT(*) AS n FROM transactions WHERE excluded = 1";
+  const row = (account ? db.prepare(`${sql} AND account_id = ?`).get(account) : db.prepare(sql).get()) as { n: number };
   return Number(row.n);
 }
 
@@ -633,46 +976,133 @@ export function setSetting(key: string, value: string): void {
   );
 }
 
-export function saveBankAccount(account: {
-  id: string;
-  iban: string;
+function rowToAccount(row: Record<string, unknown>): Account {
+  return {
+    id: String(row.id),
+    name: String(row.name ?? ""),
+    bank: String(row.bank ?? ""),
+    iban: String(row.iban ?? ""),
+    provider: (String(row.provider ?? "") as Account["provider"]) || "",
+    count: Number(row.count || 0),
+    minDate: String(row.min_date ?? ""),
+    maxDate: String(row.max_date ?? ""),
+  };
+}
+
+export function listAccounts(): Account[] {
+  const rows = db
+    .prepare(
+      `SELECT a.*, COUNT(t.id) AS count, MIN(t.date) AS min_date, MAX(t.date) AS max_date
+       FROM accounts a LEFT JOIN transactions t ON t.account_id = a.id
+       GROUP BY a.id
+       ORDER BY a.created_at ASC`,
+    )
+    .all() as Record<string, unknown>[];
+  return rows.map(rowToAccount);
+}
+
+export function getAccount(id: string): Account | null {
+  return listAccounts().find((account) => account.id === id) || null;
+}
+
+function normalizeIban(iban: string): string {
+  return iban.replace(/[\s']/g, "").toUpperCase();
+}
+
+export function createAccount(input: {
   name: string;
-  currency: string;
-  gocardlessAccountId: string;
-  requisitionId: string;
-}): void {
+  bank: string;
+  iban?: string;
+  provider?: Account["provider"];
+  externalId?: string;
+}): Account {
+  const name = input.name.trim();
+  if (!name) throw new Error("Podaj nazwę konta.");
+  if (name.length > 60) throw new Error("Nazwa konta może mieć najwyżej 60 znaków.");
+  const id = randomUUID();
   db.prepare(
-    `INSERT INTO bank_accounts (id, iban, name, currency, gocardless_account_id, requisition_id)
-     VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET
-       iban = excluded.iban,
-       name = excluded.name,
-       currency = excluded.currency,
-       gocardless_account_id = excluded.gocardless_account_id,
-       requisition_id = excluded.requisition_id`,
+    "INSERT INTO accounts (id, name, bank, iban, provider, external_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
   ).run(
-    account.id,
-    account.iban,
-    account.name,
-    account.currency,
-    account.gocardlessAccountId,
-    account.requisitionId,
+    id,
+    name,
+    input.bank.trim(),
+    normalizeIban(input.iban || ""),
+    input.provider || "",
+    input.externalId || "",
+    new Date().toISOString(),
   );
+  return getAccount(id)!;
 }
 
-export function listBankAccounts() {
-  return db.prepare("SELECT * FROM bank_accounts").all() as {
-    id: string;
-    iban: string;
-    name: string;
-    currency: string;
-    gocardless_account_id: string;
-    requisition_id: string;
-  }[];
+export function updateAccount(id: string, patch: { name?: string; iban?: string }): Account {
+  const account = getAccount(id);
+  if (!account) throw new Error("Nie znaleziono konta.");
+  const name = patch.name != null ? patch.name.trim() : account.name;
+  if (!name) throw new Error("Podaj nazwę konta.");
+  const iban = patch.iban != null ? normalizeIban(patch.iban) : account.iban;
+  db.prepare("UPDATE accounts SET name = ?, iban = ? WHERE id = ?").run(name.slice(0, 60), iban, id);
+  return getAccount(id)!;
 }
 
-export function countTransactions(): number {
-  const row = db.prepare("SELECT COUNT(*) AS n FROM transactions").get() as { n: number };
+export function deleteAccount(id: string): number {
+  db.exec("BEGIN");
+  try {
+    const removed = Number(db.prepare("DELETE FROM transactions WHERE account_id = ?").run(id).changes || 0);
+    db.prepare("DELETE FROM accounts WHERE id = ?").run(id);
+    db.exec("COMMIT");
+    return removed;
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+export function findAccount(input: {
+  iban?: string;
+  bank?: string;
+  provider?: Account["provider"];
+  externalId?: string;
+}): Account | null {
+  const accounts = listAccounts();
+  const iban = normalizeIban(input.iban || "");
+  if (input.provider && input.externalId) {
+    const linked = accounts.find((row) => row.provider === input.provider && getExternalId(row.id) === input.externalId);
+    if (linked) return linked;
+  }
+  if (iban) {
+    const byIban = accounts.find((row) => row.iban && row.iban.slice(-26) === iban.slice(-26));
+    if (byIban) return byIban;
+  }
+  if (input.bank) {
+    const sameBank = accounts.filter((row) => row.bank === input.bank && (!iban || !row.iban));
+    if (sameBank.length === 1) return sameBank[0];
+  }
+  return null;
+}
+
+function getExternalId(id: string): string {
+  const row = db.prepare("SELECT external_id FROM accounts WHERE id = ?").get(id) as { external_id: string } | undefined;
+  return row?.external_id || "";
+}
+
+export function linkAccount(id: string, input: { provider: Account["provider"]; externalId: string; iban?: string }): void {
+  db.prepare(
+    "UPDATE accounts SET provider = ?, external_id = ?, iban = CASE WHEN ? <> '' THEN ? ELSE iban END WHERE id = ?",
+  ).run(input.provider, input.externalId, normalizeIban(input.iban || ""), normalizeIban(input.iban || ""), id);
+}
+
+export function linkedAccounts(provider: Account["provider"]): (Account & { externalId: string })[] {
+  return listAccounts()
+    .filter((row) => row.provider === provider)
+    .map((row) => ({ ...row, externalId: getExternalId(row.id) }));
+}
+
+export function countTransactions(account?: string): number {
+  const row = (
+    account
+      ? db.prepare("SELECT COUNT(*) AS n FROM transactions WHERE account_id = ?").get(account)
+      : db.prepare("SELECT COUNT(*) AS n FROM transactions").get()
+  ) as { n: number };
   return Number(row.n);
 }
 
@@ -686,7 +1116,9 @@ export function clearTransactions(): void {
 
 export function clearAll(): void {
   clearTransactions();
-  db.exec("DELETE FROM category_rules; DELETE FROM custom_categories; DELETE FROM hidden_categories; DELETE FROM category_limits;");
+  db.exec(
+    "DELETE FROM accounts; DELETE FROM category_rules; DELETE FROM custom_categories; DELETE FROM hidden_categories; DELETE FROM category_limits;",
+  );
 }
 
 function rowToEvaluation(row: Record<string, unknown>): PeriodEvaluation {
@@ -779,7 +1211,7 @@ function buildCategoryBudgets(
 ): CategoryBudget[] {
   const budgets: CategoryBudget[] = [];
   for (const row of listCategoryLimits()) {
-    if (hidden.has(row.category) || row.category === SKIP_STATS_CATEGORY) continue;
+    if (hidden.has(row.category)) continue;
     const net = catMap.get(row.category) || 0;
     const spent = net < 0 ? -net : 0;
     const allowed = Math.round(row.monthlyLimit * factor * 100) / 100;

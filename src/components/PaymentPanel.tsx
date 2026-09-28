@@ -1,5 +1,6 @@
 import { CategorySelect, type CategoryScope } from "./CategorySelect";
 import { CommentNote } from "./CommentNote";
+import { ExcludeToggle } from "./ExcludeToggle";
 import { Icon } from "./Icon";
 import { categoryColor, money, shortDate } from "../format";
 import type { Transaction } from "../types";
@@ -22,8 +23,11 @@ export function PaymentPanel({
   onRemoveCategory,
   amountFilter,
   onClearAmount,
+  weekdayFilter,
+  onClearWeekday,
   onCategoryChange,
   onCommentChange,
+  onExcludedChange,
 }: {
   items: Transaction[];
   sort: PaySort;
@@ -34,8 +38,11 @@ export function PaymentPanel({
   onRemoveCategory?: (category: string) => void;
   amountFilter?: string;
   onClearAmount?: () => void;
+  weekdayFilter?: string;
+  onClearWeekday?: () => void;
   onCategoryChange: (item: Transaction, category: string, scope: CategoryScope) => void;
   onCommentChange: (item: Transaction, comment: string) => void;
+  onExcludedChange?: (item: Transaction, excluded: boolean) => void;
 }) {
   return (
     <aside className="pay-panel">
@@ -68,7 +75,7 @@ export function PaymentPanel({
             </button>
           </div>
         </div>
-        {categoryFilter?.length || amountFilter ? (
+        {categoryFilter?.length || amountFilter || weekdayFilter ? (
           <div className="filter-chips">
             {categoryFilter?.map((name) => (
               <button
@@ -89,6 +96,12 @@ export function PaymentPanel({
                 <Icon name="close" size={13} />
               </button>
             ) : null}
+            {weekdayFilter ? (
+              <button type="button" className="filter-chip" title="Usuń filtr" onClick={onClearWeekday}>
+                {weekdayFilter}
+                <Icon name="close" size={13} />
+              </button>
+            ) : null}
             {(categoryFilter?.length || 0) > 1 ? (
               <button type="button" className="link-btn quiet" onClick={onClearFilter}>
                 Wyczyść
@@ -101,7 +114,10 @@ export function PaymentPanel({
         {items.map((item) => {
           const color = categoryColor(item.category);
           return (
-            <article key={item.id} className={item.category === "Inne" ? "pay-row uncat" : "pay-row"}>
+            <article
+              key={item.id}
+              className={`pay-row${item.category === "Inne" ? " uncat" : ""}${item.excluded ? " excluded" : ""}`}
+            >
               <span className="pay-row-mark" style={{ background: color }} />
               <div className="pay-body">
                 <strong className="who" title={item.payee || item.type || undefined}>
@@ -126,6 +142,9 @@ export function PaymentPanel({
                     value={item.comment || ""}
                     onSave={(next) => onCommentChange(item, next)}
                   />
+                  {onExcludedChange ? (
+                    <ExcludeToggle compact excluded={item.excluded} onToggle={(next) => onExcludedChange(item, next)} />
+                  ) : null}
                 </div>
               </div>
               <strong className={item.amount < 0 ? "pay-amount neg" : "pay-amount pos"}>{money(item.amount)}</strong>

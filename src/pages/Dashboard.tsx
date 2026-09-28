@@ -2,13 +2,12 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { AiEvaluation } from "../components/AiEvaluationCard";
 import { AmountBars, CategoryBars, Donut, MonthBars, WeekdayBars } from "../components/Charts";
-import { CategoryLimits } from "../components/CategoryLimits";
 import { Icon } from "../components/Icon";
-import type { Page } from "../components/Layout";
+import { DownloadButton, type Navigate } from "../components/Layout";
 import { PaymentPanel, type PaySort } from "../components/PaymentPanel";
 import { PeriodBar, allPeriod, latestMonthPeriod, type Period } from "../components/PeriodBar";
-import { AMOUNT_BUCKET_QUERY, describePeriod, money, percent, previousComparable } from "../format";
-import type { Stats, Transaction } from "../types";
+import { WEEKDAY_NAMES, bucketQuery, describePeriod, money, percent, previousComparable } from "../format";
+import type { AppInfo, Stats, Transaction } from "../types";
 
 function withCategory(names: string[], next: string) {
   if (names.includes(next)) return names;
@@ -39,7 +38,16 @@ function Delta({ current, previous, label }: { current: number; previous: number
   );
 }
 
-export function Dashboard({ onNavigate }: { onNavigate: (page: Page) => void }) {
+export function Dashboard({
+  onNavigate,
+  appInfo,
+  onDemoCreated,
+}: {
+  onNavigate: Navigate;
+  appInfo: AppInfo;
+  onDemoCreated: () => Promise<void>;
+}) {
+  const [generating, setGenerating] = useState(false);
   const [period, setPeriod] = useState<Period>({ from: "", to: "" });
   const [bounds, setBounds] = useState({ minDate: "", maxDate: "" });
   const [stats, setStats] = useState<Stats | null>(null);
@@ -49,6 +57,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (page: Page) => void }) 
   const [sort, setSort] = useState<PaySort>("amount_desc");
   const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
   const [amountBucket, setAmountBucket] = useState("");
+  const [weekday, setWeekday] = useState<number | null>(null);
   const [chartType, setChartType] = useState<"bars" | "pie">("bars");
   const [error, setError] = useState("");
 
@@ -91,13 +100,16 @@ export function Dashboard({ onNavigate }: { onNavigate: (page: Page) => void }) 
     };
   }, [comparisonKey]);
 
+  const activeBucket = stats?.byAmount.find((slice) => slice.id === amountBucket);
+
   function transactionQuery() {
     return {
       ...period,
       sort,
-      kind: amountBucket ? ("expense" as const) : ("all" as const),
+      kind: activeBucket || weekday != null ? ("expense" as const) : ("all" as const),
       category: categoryFilter.length ? categoryFilter.join(",") : undefined,
-      ...(amountBucket ? AMOUNT_BUCKET_QUERY[amountBucket] : {}),
+      weekday: weekday ?? undefined,
+      ...bucketQuery(activeBucket),
     };
   }
 
@@ -121,7 +133,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (page: Page) => void }) 
     return () => {
       alive = false;
     };
-  }, [period.from, period.to, sort, categoryFilter, amountBucket]);
+  }, [period.from, period.to, sort, categoryFilter, activeBucket?.id, weekday]);
 
   if (!stats) return error ? <p className="banner error">{error}</p> : <p className="muted loading">Ładowanie…</p>;
 
@@ -144,7 +156,8 @@ export function Dashboard({ onNavigate }: { onNavigate: (page: Page) => void }) 
   const filtering = categoryFilter.length > 0;
   const heroValue = spendOf(stats, categoryFilter);
   const previousStats = previous && previous.key === comparisonKey ? previous.stats : null;
-  const listFiltered = filtering || Boolean(amountBucket);
+  const listFiltered = filtering || Boolean(amountBucket) || weekday != null;
+  const weekdayIndex = stats.byWeekday.findIndex((day) => day.id === weekday);
 
   const header = (
     <>
@@ -166,20 +179,43 @@ export function Dashboard({ onNavigate }: { onNavigate: (page: Page) => void }) 
     </>
   );
 
+  async function generateDemo() {
+    setGenerating(true);
+    try {
+      await api.importDemo();
+      await onDemoCreated();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Nie udało się wygenerować danych");
+      setGenerating(false);
+    }
+  }
+
   if (emptyAll) {
     return (
       <section className="page">
         {header}
         <div className="empty-card">
-          <h2>Brak zaimportowanych danych</h2>
-          <p>Wgraj CSV z iPKO albo połącz konto przez Open Banking — wykresy pojawią się od razu.</p>
+          <h2>{appInfo.hosted ? "Wypróbuj aplikację" : "Brak zaimportowanych danych"}</h2>
+          <p>
+            {appInfo.hosted
+              ? "Wygeneruj konto testowe z 6 miesiącami przykładowych płatności albo wgraj własny CSV z banku. Dane są tymczasowe i widzisz je tylko Ty."
+              : "Wgraj CSV z bankowości albo połącz konto przez Open Banking — wykresy pojawią się od razu. Możesz też najpierw obejrzeć przykładowe dane."}
+          </p>
           <div className="row">
-            <button type="button" className="primary" onClick={() => onNavigate("import")}>
+            <button type="button" className="primary" disabled={generating} onClick={() => void generateDemo()}>
+              <Icon name="file" size={16} />
+              {generating ? "Generuję…" : "Wygeneruj dane testowe"}
+            </button>
+            <button type="button" className="ghost" onClick={() => onNavigate("import")}>
               Importuj historię
             </button>
-            <button type="button" className="ghost" onClick={() => onNavigate("bank")}>
-              Połącz z PKO
-            </button>
+            {appInfo.hosted ? (
+              appInfo.downloadUrl ? <DownloadButton url={appInfo.downloadUrl} quiet /> : null
+            ) : (
+              <button type="button" className="ghost" onClick={() => onNavigate("settings", "bank")}>
+                Połącz z bankiem
+              </button>
+            )}
           </div>
         </div>
       </section>
@@ -261,14 +297,22 @@ export function Dashboard({ onNavigate }: { onNavigate: (page: Page) => void }) 
                   <dt>Transakcje</dt>
                   <dd>{listFiltered ? `${items.length} z ${stats.count}` : stats.count}</dd>
                 </div>
+                {stats.excludedCount ? (
+                  <div title="Ukryte płatności nie liczą się do wydatków, wykresów ani limitów">
+                    <dt>Ukryte</dt>
+                    <dd className="muted">
+                      {stats.excludedCount} · {money(stats.excludedSpend)}
+                    </dd>
+                  </div>
+                ) : null}
               </dl>
               <AiEvaluation
                 period={period}
-                onSetup={() => onNavigate("categories")}
+                onSetup={() => onNavigate("settings", "ai")}
                 filters={{
                   category: filtering ? categoryFilter.join(",") : undefined,
-                  kind: amountBucket ? "expense" : undefined,
-                  ...(amountBucket ? AMOUNT_BUCKET_QUERY[amountBucket] : {}),
+                  kind: activeBucket ? "expense" : undefined,
+                  ...bucketQuery(activeBucket),
                 }}
               />
             </div>
@@ -316,10 +360,14 @@ export function Dashboard({ onNavigate }: { onNavigate: (page: Page) => void }) 
             <article className="card mini-card">
               <div className="card-head">
                 <h2>Dni tygodnia</h2>
-                <p className="card-sub">suma wydatków</p>
+                <p className="card-sub">suma wydatków · kliknij, żeby filtrować</p>
               </div>
               {stats.byWeekday?.some((day) => day.amount) ? (
-                <WeekdayBars days={stats.byWeekday} />
+                <WeekdayBars
+                  days={stats.byWeekday}
+                  selected={weekday}
+                  onSelect={(id) => setWeekday((current) => (current === id ? null : id))}
+                />
               ) : (
                 <p className="muted">Brak wydatków.</p>
               )}
@@ -327,7 +375,12 @@ export function Dashboard({ onNavigate }: { onNavigate: (page: Page) => void }) 
             <article className="card mini-card">
               <div className="card-head">
                 <h2>Wielkość płatności</h2>
-                <p className="card-sub">kliknij, żeby filtrować</p>
+                <p className="card-sub">
+                  kliknij, żeby filtrować ·{" "}
+                  <button type="button" className="link-btn quiet" onClick={() => onNavigate("settings", "charts")}>
+                    zmień przedziały
+                  </button>
+                </p>
               </div>
               {stats.byAmount.some((slice) => slice.count) ? (
                 <AmountBars
@@ -349,15 +402,6 @@ export function Dashboard({ onNavigate }: { onNavigate: (page: Page) => void }) 
               </article>
             ) : null}
           </div>
-
-          {stats.limits?.length ? (
-            <CategoryLimits
-              items={stats.limits}
-              months={stats.limitMonths || 1}
-              selected={categoryFilter}
-              onSelect={pickCategory}
-            />
-          ) : null}
         </div>
 
         <PaymentPanel
@@ -368,8 +412,10 @@ export function Dashboard({ onNavigate }: { onNavigate: (page: Page) => void }) 
           categoryFilter={categoryFilter}
           onClearFilter={() => setCategoryFilter([])}
           onRemoveCategory={(name) => setCategoryFilter((current) => current.filter((item) => item !== name))}
-          amountFilter={stats.byAmount.find((slice) => slice.id === amountBucket)?.label}
+          amountFilter={activeBucket?.label}
           onClearAmount={() => setAmountBucket("")}
+          weekdayFilter={weekdayIndex >= 0 ? WEEKDAY_NAMES[weekdayIndex] : undefined}
+          onClearWeekday={() => setWeekday(null)}
           onCategoryChange={async (item, next, scope) => {
             setItems((current) =>
               current.map((row) => {
@@ -395,6 +441,16 @@ export function Dashboard({ onNavigate }: { onNavigate: (page: Page) => void }) 
               await api.updateComment(item.id, next);
             } catch (err) {
               setError(err instanceof Error ? err.message : "Nie zapisano komentarza");
+              await reloadItems();
+            }
+          }}
+          onExcludedChange={async (item, excluded) => {
+            setItems((current) => current.map((row) => (row.id === item.id ? { ...row, excluded } : row)));
+            try {
+              await api.setExcluded(item.id, excluded);
+              setStats(await api.stats(period));
+            } catch (err) {
+              setError(err instanceof Error ? err.message : "Nie zapisano zmiany");
               await reloadItems();
             }
           }}

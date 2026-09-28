@@ -8,7 +8,8 @@
     "dev:server": "tsx watch server/index.ts",
     "dev:client": "vite",
     "build": "tsc -p tsconfig.app.json --noEmit && vite build",
-    "start": "tsx server/index.ts"
+    "start": "tsx server/index.ts",
+    "package:win": "node scripts/package-win.mjs"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -26,6 +27,8 @@
     "@types/react-dom": "^19.1.9",
     "@vitejs/plugin-react": "^5.0.2",
     "concurrently": "^9.2.1",
+    "esbuild": "^0.28.2",
+    "postject": "^1.0.0-alpha.6",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "tsx": "^4.20.5",

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api } from "../api";
+import { api, getActiveAccount } from "../api";
 import { evaluationKey } from "../format";
 import { Icon } from "./Icon";
 import type { Period } from "./PeriodBar";
@@ -54,7 +54,7 @@ export function AiEvaluation({
       .catch((err: Error) => setError(err.message));
   }, []);
 
-  const current = evaluations.find((row) => row.scope === evaluationKey(period, filters));
+  const current = evaluations.find((row) => row.scope === evaluationKey(period, filters, getActiveAccount()));
 
   async function generate() {
     setBusy(true);
@@ -83,16 +83,13 @@ export function AiEvaluation({
     return (
       <div className={`ai ai-${variant} ai-off`}>
         <Badge />
-        <p className="muted">
-          Wymaga klucza OpenAI.{" "}
-          {onSetup ? (
-            <button type="button" className="link-btn" onClick={onSetup}>
-              Dodaj w Kategoriach
-            </button>
-          ) : (
-            "Dodaj go w Kategoriach."
-          )}
-        </p>
+        <p className="muted">Ocena okresu wymaga klucza OpenAI.</p>
+        {onSetup ? (
+          <button type="button" className="ghost sm ai-ask" onClick={onSetup}>
+            <Icon name="settings" size={14} />
+            Ustaw klucz AI
+          </button>
+        ) : null}
         {error ? <p className="banner error">{error}</p> : null}
       </div>
     );

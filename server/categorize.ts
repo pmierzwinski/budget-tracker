@@ -15,11 +15,10 @@ export const BUILTIN_CATEGORIES = [
   "Finanse",
   "Przelewy",
   "Wynagrodzenie",
-  "Poza statystykami",
   "Inne",
 ] as const;
 
-export const SKIP_STATS_CATEGORY = "Poza statystykami";
+export const LEGACY_SKIP_CATEGORY = "Poza statystykami";
 
 export type BuiltinCategory = (typeof BUILTIN_CATEGORIES)[number];
 

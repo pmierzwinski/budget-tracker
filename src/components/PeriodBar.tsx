@@ -30,6 +30,7 @@ export function latestMonthPeriod(maxDate: string): Period {
 }
 
 const RANGE_PRESETS = [
+  { id: "month", label: "Ten miesiąc" },
   { id: "30", label: "30 dni" },
   { id: "90", label: "90 dni" },
   { id: "all", label: "Cały okres" },
@@ -119,6 +120,7 @@ export function PeriodBar({
   maxDate,
   onChange,
   children,
+  sticky,
 }: {
   page: string;
   period: Period;
@@ -126,6 +128,7 @@ export function PeriodBar({
   maxDate: string;
   onChange: (period: Period) => void;
   children?: ReactNode;
+  sticky?: boolean;
 }) {
   const [open, setOpen] = useState<"month" | "custom" | null>(null);
   const monthRef = useRef<HTMLDivElement>(null);
@@ -133,6 +136,15 @@ export function PeriodBar({
   const close = () => setOpen(null);
   useDismiss(open === "month", monthRef, close);
   useDismiss(open === "custom", customRef, close);
+  const [stuck, setStuck] = useState(false);
+
+  useEffect(() => {
+    if (!sticky) return;
+    const onScroll = () => setStuck(window.scrollY > 8);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [sticky]);
 
   const info = describePeriod(period, minDate, maxDate);
   const ready = Boolean(period.from && period.to);
@@ -182,7 +194,7 @@ export function PeriodBar({
   }
 
   return (
-    <header className="period-head">
+    <header className={sticky ? `period-head sticky${stuck ? " stuck" : ""}` : "period-head"}>
       <div className="period-main">
         <p className="eyebrow">{page}</p>
         <div className="period-nav">
