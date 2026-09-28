@@ -1,0 +1,107 @@
+/* ---------- Hidden payments ---------- */
+
+.exclude-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.08rem 0.45rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.74rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.exclude-toggle:hover,
+.exclude-toggle:focus-visible {
+  background: var(--surface-3);
+  color: var(--ink);
+}
+
+.exclude-toggle.compact {
+  font-size: 0.7rem;
+}
+
+.exclude-toggle.on {
+  background: var(--surface-3);
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+@media (hover: hover) {
+  .pay-row .exclude-toggle:not(.on),
+  .tx-table tbody tr .exclude-toggle:not(.on),
+  .drill-list li .exclude-toggle:not(.on) {
+    opacity: 0;
+    transition: opacity 0.12s;
+  }
+
+  .pay-row:hover .exclude-toggle,
+  .pay-row:focus-within .exclude-toggle,
+  .tx-table tbody tr:hover .exclude-toggle,
+  .tx-table tbody tr:focus-within .exclude-toggle,
+  .drill-list li:hover .exclude-toggle,
+  .drill-list li:focus-within .exclude-toggle {
+    opacity: 1;
+  }
+}
+
+.pay-row.excluded .who,
+.pay-row.excluded .pay-amount,
+tr.excluded .tx-who strong,
+tr.excluded .num,
+.drill-list li.excluded .drill-who,
+.drill-list li.excluded > .num {
+  color: var(--faint);
+}
+
+.pay-row.excluded .pay-amount,
+tr.excluded td.num,
+.drill-list li.excluded > .num {
+  text-decoration: line-through;
+  text-decoration-color: var(--line-strong);
+}
+
+.toggle-chip {
+  gap: 0.35rem;
+}
+
+.toggle-chip .icon {
+  color: inherit;
+}
+
+.toggle-chip.sm {
+  min-height: 30px;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.8rem;
+}
+
+.toggle-chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.toggle-chip:disabled:hover {
+  background: var(--surface);
+}
+
+.ghost.ai-setup {
+  border-color: #ddd3f7;
+  color: var(--ai);
+}
+
+.ghost.ai-setup:hover:not(:disabled) {
+  background: var(--ai-soft);
+  color: var(--ai);
+}
+
+.check.disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+.check.disabled .link-btn {
+  font-size: inherit;
+}

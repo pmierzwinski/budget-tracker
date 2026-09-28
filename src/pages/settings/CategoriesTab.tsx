@@ -1,107 +1,75 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { DEFAULT_CATEGORY } from "../../../shared/domain.ts";
 import { api } from "../../api";
+import { useApp } from "../../app/AppContext";
 import { Icon } from "../../components/Icon";
-import type { Navigate } from "../../components/Layout";
 import { NewCategoryDialog } from "../../components/NewCategoryDialog";
-import { categoryColor } from "../../format";
+import { CategoryTag, Swatch } from "../../components/ui/CategoryTag";
+import { Notices } from "../../components/ui/Notices";
+import { useAction } from "../../hooks/useAction";
 import type { CategoryRule } from "../../types";
 
-const OTHER = "Inne";
-
-export function CategoriesTab({ onNavigate }: { onNavigate: Navigate }) {
-  const [rules, setRules] = useState<CategoryRule[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
-  const [limits, setLimits] = useState<Record<string, number>>({});
+export function CategoriesTab() {
+  const { meta, refreshMeta, navigate } = useApp();
+  const { categories, rules } = meta;
+  const limits = Object.fromEntries(meta.limits.map((row) => [row.category, row.monthlyLimit]));
   const [pattern, setPattern] = useState("");
-  const [category, setCategory] = useState("Transport");
+  const [picked, setCategory] = useState("Transport");
+  const category = categories.includes(picked) ? picked : categories[0] || picked;
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-
-  async function load() {
-    const [data, meta] = await Promise.all([api.rules(), api.meta()]);
-    setRules(data.rules);
-    setCategories(data.categories);
-    setLimits(Object.fromEntries((meta.limits || []).map((row) => [row.category, row.monthlyLimit])));
-    if (!data.categories.includes(category) && data.categories[0]) setCategory(data.categories[0]);
-  }
-
-  useEffect(() => {
-    load().catch((err: Error) => setError(err.message));
-  }, []);
-
-  function notify(text: string) {
-    setError("");
-    setMessage(text);
-  }
+  const { message, error, setMessage, run } = useAction();
 
   async function addCategory(name: string) {
     const result = await api.addCategory(name);
-    notify(`Dodano kategorię „${result.name}”.`);
-    setCategories(result.categories);
+    setMessage(`Dodano kategorię „${result.name}”.`);
     setCategory(result.name);
+    await refreshMeta();
   }
 
-  async function rename(item: string) {
+  function rename(item: string) {
     const next = editValue.trim();
     setEditing(null);
     if (!next || next === item) return;
-    setError("");
-    try {
+    return run(async () => {
       const result = await api.renameCategory(item, next);
-      notify(`Zmieniono „${item}” na „${next}” (${result.updated} płatności).`);
-      setCategories(result.categories);
+      setMessage(`Zmieniono „${item}” na „${next}” (${result.updated} płatności).`);
       if (category === item) setCategory(next);
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Nie zmieniono nazwy");
-    }
+      await refreshMeta();
+    }, "Nie zmieniono nazwy");
   }
 
-  async function remove(item: string) {
+  function remove(item: string) {
     if (!window.confirm(`Usunąć kategorię „${item}”? Płatności i reguły przejdą do Inne.`)) return;
-    setError("");
-    try {
+    return run(async () => {
       const result = await api.deleteCategory(item);
-      notify(`Usunięto „${item}”. ${result.updated} płatności przeszło do Inne.`);
-      setCategories(result.categories);
-      if (category === item) setCategory(OTHER);
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Nie usunięto kategorii");
-    }
+      setMessage(`Usunięto „${item}”. ${result.updated} płatności przeszło do Inne.`);
+      if (category === item) setCategory(DEFAULT_CATEGORY);
+      await refreshMeta();
+    }, "Nie usunięto kategorii");
   }
 
-  async function addRule() {
-    setError("");
-    try {
+  function addRule() {
+    return run(async () => {
       const result = await api.addRule(pattern.trim(), category);
-      notify(`Zapisano regułę. Zaktualizowano ${result.updated} operacji.`);
+      setMessage(`Zapisano regułę. Zaktualizowano ${result.updated} operacji.`);
       setPattern("");
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Nie zapisano reguły");
-    }
+      await refreshMeta();
+    }, "Nie zapisano reguły");
   }
 
   async function removeRule(rule: CategoryRule) {
-    setError("");
-    setRules((current) => current.filter((row) => row.id !== rule.id));
-    try {
+    await run(async () => {
       await api.deleteRule(rule.id);
-      notify(`Usunięto regułę „${rule.pattern}”. Płatności przeliczono od nowa.`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Nie usunięto reguły");
-    }
-    await load().catch(() => undefined);
+      setMessage(`Usunięto regułę „${rule.pattern}”. Płatności przeliczono od nowa.`);
+    }, "Nie usunięto reguły");
+    await refreshMeta().catch(() => undefined);
   }
 
   return (
     <>
-      {message ? <p className="banner ok">{message}</p> : null}
-      {error ? <p className="banner error">{error}</p> : null}
+      <Notices message={message} error={error} />
 
       <div className="split">
         <article className="card">
@@ -127,7 +95,7 @@ export function CategoriesTab({ onNavigate }: { onNavigate: Navigate }) {
             {categories.map((item) => (
               <div key={item} className="cat-line">
                 <div className="cat-line-name">
-                  <span className="swatch" style={{ background: categoryColor(item) }} />
+                  <Swatch category={item} />
                   {editing === item ? (
                     <input
                       aria-label={`Nowa nazwa dla ${item}`}
@@ -144,10 +112,10 @@ export function CategoriesTab({ onNavigate }: { onNavigate: Navigate }) {
                     <span>{item}</span>
                   )}
                 </div>
-                <button type="button" className="link-btn quiet cat-limit" onClick={() => onNavigate("limits")}>
+                <button type="button" className="link-btn quiet cat-limit" onClick={() => navigate("limits")}>
                   {limits[item] ? `${limits[item].toLocaleString("pl-PL")} zł` : "—"}
                 </button>
-                {item === OTHER ? (
+                {item === DEFAULT_CATEGORY ? (
                   <em className="cat-default">domyślna</em>
                 ) : (
                   <div className="cat-actions">
@@ -211,10 +179,7 @@ export function CategoriesTab({ onNavigate }: { onNavigate: Navigate }) {
                   <span>
                     <strong>{rule.pattern}</strong>
                     <span className="muted"> → </span>
-                    <span className="rule-cat">
-                      <span className="swatch" style={{ background: categoryColor(rule.category) }} />
-                      {rule.category}
-                    </span>
+                    <CategoryTag category={rule.category} />
                   </span>
                   <button
                     type="button"

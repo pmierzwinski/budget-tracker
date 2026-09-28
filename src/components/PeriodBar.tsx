@@ -1,34 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import {
-  MONTHS_SHORT,
-  addDays,
-  currentMonth,
-  describePeriod,
-  monthRange,
-  stepPeriod,
-  today,
-} from "../format";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useApp } from "../app/AppContext";
+import { useDismiss } from "../hooks/useDismiss";
+import { applyPreset, currentMonth, describePeriod, monthRange, stepPeriod, today, type Period } from "../period";
 import { Icon } from "./Icon";
+import { MonthPicker } from "./MonthPicker";
 
-export type Period = { from: string; to: string };
-
-export function allPeriod(minDate: string, maxDate: string): Period {
-  return { from: minDate, to: maxDate };
-}
-
-export function applyPreset(preset: string, minDate: string, maxDate: string): Period {
-  const end = today();
-  if (preset === "month") return monthRange(currentMonth());
-  if (preset === "30") return { from: addDays(end, -29), to: end };
-  if (preset === "90") return { from: addDays(end, -89), to: end };
-  return allPeriod(minDate, maxDate);
-}
-
-export function latestMonthPeriod(maxDate: string): Period {
-  const month = currentMonth();
-  return monthRange(maxDate && maxDate.slice(0, 7) < month ? maxDate.slice(0, 7) : month);
-}
-
+// "Ten miesiąc" is here and next to the title on purpose (user request).
 const RANGE_PRESETS = [
   { id: "month", label: "Ten miesiąc" },
   { id: "30", label: "30 dni" },
@@ -36,100 +13,24 @@ const RANGE_PRESETS = [
   { id: "all", label: "Cały okres" },
 ];
 
-function useDismiss(open: boolean, ref: RefObject<HTMLElement | null>, close: () => void) {
-  useEffect(() => {
-    if (!open) return;
-    function onPointer(event: MouseEvent) {
-      if (ref.current && !ref.current.contains(event.target as Node)) close();
-    }
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") close();
-    }
-    document.addEventListener("mousedown", onPointer);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onPointer);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open, ref, close]);
-}
-
-function MonthPicker({
-  active,
-  initialYear,
-  minMonth,
-  maxMonth,
-  onPick,
-}: {
-  active: string;
-  initialYear: number;
-  minMonth: string;
-  maxMonth: string;
-  onPick: (month: string) => void;
-}) {
-  const [year, setYear] = useState(initialYear);
-  const now = currentMonth();
-  return (
-    <div className="popover month-picker" role="dialog" aria-label="Wybierz miesiąc">
-      <div className="mp-head">
-        <button
-          type="button"
-          className="step-btn sm"
-          aria-label="Poprzedni rok"
-          disabled={year <= Number(minMonth.slice(0, 4))}
-          onClick={() => setYear(year - 1)}
-        >
-          <Icon name="left" size={16} />
-        </button>
-        <strong>{year}</strong>
-        <button
-          type="button"
-          className="step-btn sm"
-          aria-label="Następny rok"
-          disabled={year >= Number(maxMonth.slice(0, 4))}
-          onClick={() => setYear(year + 1)}
-        >
-          <Icon name="right" size={16} />
-        </button>
-      </div>
-      <div className="mp-grid">
-        {MONTHS_SHORT.map((label, index) => {
-          const month = `${year}-${String(index + 1).padStart(2, "0")}`;
-          const classes = [month === active ? "active" : "", month === now ? "now" : ""].filter(Boolean);
-          return (
-            <button
-              key={month}
-              type="button"
-              className={classes.join(" ") || undefined}
-              disabled={month < minMonth || month > maxMonth}
-              onClick={() => onPick(month)}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
+/**
+ * Header of every analysis page: page name, ‹ › (also ←/→) moving the period by its length, a month picker
+ * and presets. `sticky` keeps it at the top while scrolling.
+ */
 export function PeriodBar({
   page,
   period,
-  minDate,
-  maxDate,
   onChange,
   children,
   sticky,
 }: {
   page: string;
   period: Period;
-  minDate: string;
-  maxDate: string;
   onChange: (period: Period) => void;
   children?: ReactNode;
   sticky?: boolean;
 }) {
+  const { minDate, maxDate } = useApp().meta;
   const [open, setOpen] = useState<"month" | "custom" | null>(null);
   const monthRef = useRef<HTMLDivElement>(null);
   const customRef = useRef<HTMLDivElement>(null);

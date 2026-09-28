@@ -1,10 +1,14 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { api } from "../../api";
+import { useApp } from "../../app/AppContext";
 import { Icon } from "../../components/Icon";
-import { bankLabel, type Navigate } from "../../components/Layout";
 import { Modal } from "../../components/Modal";
-import { formatDay, plural } from "../../format";
-import type { Account, Bank } from "../../types";
+import { NewAccountDialog } from "../../components/NewAccountDialog";
+import { Notices } from "../../components/ui/Notices";
+import { bankLabel, formatDay, plural } from "../../format";
+import { useAction } from "../../hooks/useAction";
+import { demoAddedMessage } from "../../messages";
+import type { Account } from "../../types";
 
 const PROVIDER_LABEL: Record<string, string> = {
   gocardless: "GoCardless",
@@ -17,109 +21,56 @@ const DEMO_ACCOUNT = "Konto testowe";
 const DEMO_RAW_ACCOUNT = "Konto testowe bez kategorii";
 const DEMO_NAMES = [DEMO_ACCOUNT, DEMO_RAW_ACCOUNT];
 
-export function AccountsTab({
-  banks,
-  onNavigate,
-  onAccountsChanged,
-}: {
-  banks: Bank[];
-  onNavigate: Navigate;
-  onAccountsChanged: () => void | Promise<void>;
-}) {
-  const [accounts, setAccounts] = useState<Account[]>([]);
+export function AccountsTab() {
+  const { meta, refreshMeta, navigate } = useApp();
+  const { accounts, banks } = meta;
   const [draft, setDraft] = useState<Draft>(null);
   const [creating, setCreating] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [newBank, setNewBank] = useState("pko");
-  const [newIban, setNewIban] = useState("");
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
   const [demoOpen, setDemoOpen] = useState(false);
   const [demoRaw, setDemoRaw] = useState(false);
+  const { busy, message, error, setMessage, setError, run } = useAction();
   const demoName = demoRaw ? DEMO_RAW_ACCOUNT : DEMO_ACCOUNT;
   const demoExists = accounts.some((account) => account.name === demoName);
 
-  useEffect(() => {
-    api
-      .accounts()
-      .then((data) => setAccounts(data.accounts))
-      .catch((err: Error) => setError(err.message));
-  }, []);
-
-  function applied(list: Account[] | undefined, text: string) {
-    if (Array.isArray(list)) setAccounts(list);
+  async function applied(text: string) {
     setError("");
     setMessage(text);
-    void api
-      .accounts()
-      .then((data) => setAccounts(data.accounts))
-      .catch((err: Error) => setError(err.message));
-    void onAccountsChanged();
+    await refreshMeta();
   }
 
-  async function saveDraft() {
+  function saveDraft() {
     if (!draft) return;
     const name = draft.name.trim();
     if (!name) return;
-    try {
+    return run(async () => {
       const result = await api.updateAccount(draft.id, { name, iban: draft.iban.trim() });
       setDraft(null);
-      applied(result.accounts, `Zapisano konto „${result.account.name}”.`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Nie zapisano konta");
-    }
+      await applied(`Zapisano konto „${result.account.name}”.`);
+    }, "Nie zapisano konta");
   }
 
-  async function create() {
-    const name = newName.trim();
-    if (!name) return;
-    try {
-      const result = await api.createAccount({ name, bank: newBank, iban: newIban.trim() || undefined });
-      setCreating(false);
-      setNewName("");
-      setNewIban("");
-      applied(result.accounts, `Dodano konto „${result.account.name}”. Wybierz je przy imporcie.`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Nie dodano konta");
-    }
-  }
-
-  async function addDemo() {
-    setBusy(true);
-    try {
+  function addDemo() {
+    return run(async () => {
       const result = await api.importDemo({ uncategorized: demoRaw });
       setDemoOpen(false);
-      applied(
-        result.accounts,
-        `Dodano „${result.account.name}” z ${result.imported} przykładowymi płatnościami z ostatnich 6 miesięcy${
-          demoRaw ? " — wszystkie w „Inne”" : ""
-        }. Wybierz je w przełączniku konta w menu bocznym.`,
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Nie dodano konta testowego");
-    } finally {
-      setBusy(false);
-    }
+      await applied(`${demoAddedMessage(result, demoRaw)} Wybierz je w przełączniku konta w menu bocznym.`);
+    }, "Nie dodano konta testowego");
   }
 
-  async function remove(account: Account) {
+  function remove(account: Account) {
     const question = account.count
       ? `Usunąć konto „${account.name}” razem z ${account.count} płatnościami? Tego nie da się cofnąć.`
       : `Usunąć konto „${account.name}”?`;
     if (!window.confirm(question)) return;
-    try {
+    return run(async () => {
       const result = await api.deleteAccount(account.id);
-      applied(result.accounts, `Usunięto konto „${account.name}” (${result.removed} płatności).`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Nie usunięto konta");
-    }
+      await applied(`Usunięto konto „${account.name}” (${result.removed} płatności).`);
+    }, "Nie usunięto konta");
   }
 
   return (
     <>
-      {message ? <p className="banner ok">{message}</p> : null}
-      {error ? <p className="banner error">{error}</p> : null}
+      <Notices message={message} error={error} />
 
       <article className="card">
         <div className="card-head">
@@ -229,7 +180,7 @@ export function AccountsTab({
         ) : (
           <div className="empty-card inline">
             <p className="muted">Konta tworzą się same przy imporcie albo połączeniu z bankiem.</p>
-            <button className="primary" type="button" onClick={() => onNavigate("import")}>
+            <button className="primary" type="button" onClick={() => navigate("import")}>
               Importuj historię
             </button>
           </div>
@@ -239,49 +190,17 @@ export function AccountsTab({
         </p>
       </article>
 
-      <Modal
+      <NewAccountDialog
         open={creating}
-        title="Nowe konto"
         eyebrow="Konta"
+        withIban
         onClose={() => setCreating(false)}
-        onSubmit={() => void create()}
-        footer={
-          <>
-            <button type="button" className="ghost" onClick={() => setCreating(false)}>
-              Anuluj
-            </button>
-            <button type="submit" className="primary" disabled={!newName.trim()}>
-              Dodaj konto
-            </button>
-          </>
-        }
-      >
-        <label className="field">
-          Nazwa
-          <input
-            autoFocus
-            maxLength={60}
-            value={newName}
-            placeholder="np. mBank wspólne, ING oszczędności"
-            onChange={(e) => setNewName(e.target.value)}
-          />
-        </label>
-        <label className="field">
-          Bank
-          <select value={newBank} onChange={(e) => setNewBank(e.target.value)}>
-            {banks.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          Numer rachunku <span className="muted">(opcjonalnie)</span>
-          <input value={newIban} placeholder="PL00 0000 …" onChange={(e) => setNewIban(e.target.value)} />
-        </label>
-        <p className="field-hint">Z numerem rachunku import z opcją „Wykryj automatycznie” sam trafi na to konto.</p>
-      </Modal>
+        onError={setError}
+        onCreated={(account) => {
+          setCreating(false);
+          void applied(`Dodano konto „${account.name}”. Wybierz je przy imporcie.`);
+        }}
+      />
 
       <Modal
         open={demoOpen}

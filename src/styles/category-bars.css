@@ -1,0 +1,133 @@
+/* ---------- Category bars ---------- */
+
+.hbars {
+  display: grid;
+  grid-template-columns: fit-content(11rem) minmax(3rem, 1fr) auto auto;
+  column-gap: 0.75rem;
+  row-gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hbars.has-limits {
+  grid-template-columns: fit-content(11rem) minmax(3rem, 1fr) auto auto auto;
+}
+
+.hbars > li {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+}
+
+.hbar {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: 10rem minmax(3rem, 1fr) 6.5rem 3.2rem;
+  grid-template-columns: subgrid;
+  align-items: center;
+  min-height: 34px;
+  padding: 0.3rem 0.5rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 0.875rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.has-limits .hbar {
+  grid-template-columns: 10rem minmax(3rem, 1fr) 6.5rem 3.2rem 5.5rem;
+  grid-template-columns: subgrid;
+}
+
+.hbar:hover {
+  background: var(--surface-2);
+}
+
+.hbar.selected {
+  background: var(--accent-soft);
+}
+
+.hbar.selected .hbar-label {
+  font-weight: 600;
+}
+
+.hbar-name {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.hbar-dot {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  border-radius: 3px;
+}
+
+.hbar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hbar-track {
+  display: block;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: var(--surface-3);
+}
+
+.hbar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  transition: width 0.25s;
+}
+
+.hbar-amount {
+  font-weight: 600;
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.hbar-pct {
+  min-width: 3.2em;
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.hbar-limit {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.hbar-limit.ok {
+  color: var(--income);
+}
+
+.hbar-limit.warn {
+  color: var(--warn);
+}
+
+.hbar-limit.over {
+  color: var(--expense);
+}
+
+.hbar.dimmed .hbar-fill {
+  opacity: 0.28;
+}
+
+.hbar.dimmed .hbar-name,
+.hbar.dimmed .hbar-amount {
+  color: var(--muted);
+}

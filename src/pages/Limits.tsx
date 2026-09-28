@@ -1,11 +1,16 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { DEFAULT_CATEGORY, limitStatus } from "../../shared/domain.ts";
+import { round2 } from "../../shared/numbers.ts";
 import { api } from "../api";
+import { useApp } from "../app/AppContext";
 import { CategoryLimits } from "../components/CategoryLimits";
-import { PeriodBar, latestMonthPeriod, type Period } from "../components/PeriodBar";
-import { categoryColor, money, percent } from "../format";
-import type { Stats } from "../types";
-
-const OTHER = "Inne";
+import { PeriodBar } from "../components/PeriodBar";
+import { Notices } from "../components/ui/Notices";
+import { Swatch } from "../components/ui/CategoryTag";
+import { errorMessage, money, percent } from "../format";
+import { useAsync } from "../hooks/useAsync";
+import { usePeriod } from "../hooks/usePeriod";
+import type { CategoryLimitSetting } from "../types";
 
 function formatLimit(value: number | undefined): string {
   if (value == null) return "";
@@ -17,45 +22,24 @@ function parseLimit(raw: string): number | null {
   if (!cleaned) return null;
   const value = Number(cleaned);
   if (!Number.isFinite(value) || value < 0) throw new Error("Podaj dodatnią kwotę albo zostaw puste.");
-  return value === 0 ? null : Math.round(value * 100) / 100;
+  return value === 0 ? null : round2(value);
+}
+
+function limitMap(rows: CategoryLimitSetting[]): Record<string, number> {
+  return Object.fromEntries(rows.map((row) => [row.category, row.monthlyLimit]));
 }
 
 export function Limits() {
-  const [period, setPeriod] = useState<Period>({ from: "", to: "" });
-  const [bounds, setBounds] = useState({ minDate: "", maxDate: "" });
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [categories, setCategories] = useState<string[]>([]);
-  const [limits, setLimits] = useState<Record<string, number>>({});
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const { meta, refreshMeta } = useApp();
+  const { period, setPeriod } = usePeriod("month");
+  const categories = meta.categories;
+  const limits = limitMap(meta.limits);
+  const [drafts, setDrafts] = useState<Record<string, string>>(() =>
+    Object.fromEntries(Object.entries(limits).map(([name, value]) => [name, formatLimit(value)])),
+  );
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    api
-      .meta()
-      .then((meta) => {
-        setBounds({ minDate: meta.minDate, maxDate: meta.maxDate });
-        setCategories(meta.categories);
-        const map: Record<string, number> = {};
-        for (const row of meta.limits || []) map[row.category] = row.monthlyLimit;
-        setLimits(map);
-        setDrafts(Object.fromEntries(Object.entries(map).map(([name, value]) => [name, formatLimit(value)])));
-        setPeriod((current) => (current.from ? current : latestMonthPeriod(meta.maxDate)));
-      })
-      .catch((err: Error) => setError(err.message));
-  }, []);
-
-  useEffect(() => {
-    if (!period.from) return;
-    let alive = true;
-    api
-      .stats(period)
-      .then((next) => alive && setStats(next))
-      .catch((err: Error) => alive && setError(err.message));
-    return () => {
-      alive = false;
-    };
-  }, [period.from, period.to]);
+  const stats = useAsync(() => api.stats(period), [period.from, period.to]);
 
   async function save(category: string) {
     try {
@@ -67,37 +51,34 @@ export function Limits() {
       }
       setError("");
       const result = await api.setCategoryLimit(category, next);
-      const map: Record<string, number> = {};
-      for (const row of result.limits) map[row.category] = row.monthlyLimit;
-      setLimits(map);
-      setDrafts((current) => ({ ...current, [category]: formatLimit(map[category]) }));
+      setDrafts((current) => ({ ...current, [category]: formatLimit(limitMap(result.limits)[category]) }));
       setMessage(next ? `Limit „${category}”: ${money(next)} / mies.` : `Zdjęto limit z „${category}”.`);
-      setStats(await api.stats(period));
+      await refreshMeta();
+      stats.reload();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Nie zapisano limitu");
+      setError(errorMessage(err, "Nie zapisano limitu"));
       setDrafts((current) => ({ ...current, [category]: formatLimit(limits[category]) }));
     }
   }
 
-  const spent = new Map((stats?.byCategory || []).filter((row) => row.amount < 0).map((row) => [row.category, -row.amount]));
-  const factor = stats?.limitMonths || 1;
+  const spent = new Map((stats.data?.byCategory || []).filter((row) => row.amount < 0).map((row) => [row.category, -row.amount]));
+  const factor = stats.data?.limitMonths || 1;
   const rows = [...categories].sort((a, b) => {
     const limitDiff = Number(Boolean(limits[b])) - Number(Boolean(limits[a]));
     if (limitDiff) return limitDiff;
-    if (a === OTHER) return 1;
-    if (b === OTHER) return -1;
+    if (a === DEFAULT_CATEGORY) return 1;
+    if (b === DEFAULT_CATEGORY) return -1;
     return (spent.get(b) || 0) - (spent.get(a) || 0);
   });
   const totalLimit = Object.values(limits).reduce((sum, value) => sum + value, 0);
-  const budgets = stats?.limits || [];
+  const budgets = stats.data?.limits || [];
   const limitedSpend = budgets.reduce((sum, row) => sum + row.spent, 0);
   const limitedAllowed = budgets.reduce((sum, row) => sum + row.allowed, 0);
 
   return (
     <section className="page">
-      <PeriodBar page="Limity" period={period} minDate={bounds.minDate} maxDate={bounds.maxDate} onChange={setPeriod} />
-      {message ? <p className="banner ok">{message}</p> : null}
-      {error ? <p className="banner error">{error}</p> : null}
+      <PeriodBar page="Limity" period={period} onChange={setPeriod} />
+      <Notices message={message} error={error || stats.error} />
 
       {budgets.length ? (
         <div className="kpi-row">
@@ -121,8 +102,8 @@ export function Limits() {
         </div>
       ) : null}
 
-      {stats && budgets.length ? (
-        <CategoryLimits items={budgets} months={stats.limitMonths || 1} title="Wykorzystanie w tym okresie" />
+      {stats.data && budgets.length ? (
+        <CategoryLimits items={budgets} months={stats.data.limitMonths || 1} title="Wykorzystanie w tym okresie" />
       ) : null}
 
       <article className="card">
@@ -146,11 +127,11 @@ export function Limits() {
             const limit = limits[category];
             const allowed = limit ? limit * factor : 0;
             const ratio = allowed ? value / allowed : 0;
-            const status = ratio > 1.001 ? "over" : ratio >= 0.85 ? "warn" : "ok";
+            const status = limitStatus(ratio);
             return (
               <div key={category} className={limit ? "limit-line has-limit" : "limit-line"}>
                 <span className="cat-line-name">
-                  <span className="swatch" style={{ background: categoryColor(category) }} />
+                  <Swatch category={category} />
                   <span>{category}</span>
                 </span>
                 <span className="num">{value ? money(value) : "—"}</span>

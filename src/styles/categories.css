@@ -1,0 +1,160 @@
+/* ---------- Categories ---------- */
+
+.inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.inline-form input {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.cat-table {
+  display: grid;
+}
+
+.cat-table-head,
+.cat-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 8.5rem 11.5rem;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.4rem 0.5rem;
+}
+
+.cat-table-head {
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.cat-line {
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.cat-line:hover {
+  background: var(--surface-2);
+}
+
+.cat-line-name {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+  font-weight: 500;
+}
+
+.cat-line-name > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cat-line-name input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 30px;
+  padding: 0.2rem 0.5rem;
+}
+
+.swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  border-radius: 3px;
+}
+
+.money-input {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.money-input input {
+  width: 100%;
+  min-height: 30px;
+  padding: 0.2rem 0.5rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  box-shadow: none;
+}
+
+.cat-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.3rem;
+}
+
+.cat-actions .ghost {
+  box-shadow: none;
+}
+
+.cat-default {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-style: normal;
+  text-align: right;
+}
+
+.ai-run {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.9rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--line-soft);
+}
+
+.ai-run p {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.rule-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 11rem) auto;
+  gap: 0.5rem;
+}
+
+.rules-list {
+  display: grid;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rules-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 0.875rem;
+}
+
+.rules-list li:last-child {
+  border-bottom: 0;
+}
+
+.rule-cat {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.empty-note {
+  margin: 0.75rem 0 0;
+  font-size: 0.85rem;
+}

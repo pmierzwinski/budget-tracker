@@ -7,9 +7,11 @@
     "dev": "concurrently -k -n api,web -c cyan,magenta \"npm:dev:server\" \"npm:dev:client\"",
     "dev:server": "tsx watch server/index.ts",
     "dev:client": "vite",
-    "build": "tsc -p tsconfig.app.json --noEmit && vite build",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.app.json",
+    "build": "npm run typecheck && vite build",
     "start": "tsx server/index.ts",
-    "package:win": "node scripts/package-win.mjs"
+    "package:win": "node scripts/package-win.mjs",
+    "snapshot": "node scripts/api-snapshot.mjs"
   },
   "dependencies": {
     "cors": "^2.8.5",

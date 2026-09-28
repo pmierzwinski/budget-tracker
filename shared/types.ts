@@ -1,0 +1,213 @@
+// Data shapes shared by the server and the frontend (the API contract).
+
+export type TransactionSource = "csv" | "gocardless" | "enablebanking" | "demo";
+
+export type Transaction = {
+  id: string;
+  date: string;
+  bookingDate: string;
+  amount: number;
+  currency: string;
+  type: string;
+  payee: string;
+  title: string;
+  description: string;
+  accountIban: string;
+  accountId: string;
+  category: string;
+  comment: string;
+  excluded: boolean;
+  source: TransactionSource;
+  externalId: string;
+  createdAt: string;
+};
+
+export type TxSort = "date_desc" | "date_asc" | "amount_desc" | "amount_asc" | "category_asc" | "category_desc";
+
+export type TxKind = "all" | "expense" | "income";
+
+type TxFilterBase = {
+  from?: string;
+  to?: string;
+  category?: string;
+  q?: string;
+  kind?: TxKind;
+  sort?: TxSort;
+  includeExcluded?: boolean;
+  excludedOnly?: boolean;
+  weekday?: number;
+};
+
+/** Filters as the frontend sends them (amounts typed by the user, comma allowed). */
+export type TxQuery = TxFilterBase & { minAmount?: string; maxAmount?: string };
+
+/** Filters parsed by the server. */
+export type TxFilters = TxFilterBase & { minAmount?: number; maxAmount?: number; account?: string; limit?: number };
+
+export type RecurringStatus = "auto" | "active" | "ended" | "hidden";
+
+export type AmountBucket = {
+  id: string;
+  label: string;
+  min: number;
+  max: number | null;
+  amount: number;
+  count: number;
+};
+
+export type Stats = {
+  from: string;
+  to: string;
+  income: number;
+  expenses: number;
+  net: number;
+  byCategory: { category: string; amount: number }[];
+  byMonth: { month: string; income: number; expenses: number }[];
+  byMonthCategory: { month: string; category: string; amount: number }[];
+  byDayCategory: { date: string; category: string; amount: number }[];
+  byWeekday: { id: number; amount: number }[];
+  byAmount: AmountBucket[];
+  count: number;
+  totalAll: number;
+  excludedCount: number;
+  excludedSpend: number;
+  limitMonths: number;
+  limits: CategoryBudget[];
+};
+
+export type RecurringPayment = {
+  key: string;
+  name: string;
+  category: string;
+  amount: number;
+  months: number;
+  lastDate: string;
+  active: boolean;
+  autoActive: boolean;
+  status: RecurringStatus;
+};
+
+export type Insights = {
+  payees: { name: string; category: string; amount: number; count: number; average: number }[];
+  biggest: Transaction[];
+  recurring: RecurringPayment[];
+  daily: {
+    days: number;
+    average: number;
+    median: number;
+    spendDays: number;
+    noSpendDays: number;
+    weekdayAverage: number;
+    weekendAverage: number;
+    maxDay: { date: string; amount: number } | null;
+  };
+};
+
+export type LimitStatus = "ok" | "warn" | "over";
+
+export type CategoryBudget = {
+  category: string;
+  monthlyLimit: number;
+  allowed: number;
+  spent: number;
+  remaining: number;
+  ratio: number;
+  status: LimitStatus;
+};
+
+export type CategoryLimitSetting = {
+  category: string;
+  monthlyLimit: number;
+};
+
+export type CategoryRule = {
+  id: string;
+  pattern: string;
+  category: string;
+  createdAt: string;
+};
+
+export type PeriodEvaluation = {
+  scope: string;
+  from: string;
+  to: string;
+  label: string;
+  text: string;
+  createdAt: string;
+};
+
+export type AccountProvider = "" | "gocardless" | "enablebanking";
+
+export type Account = {
+  id: string;
+  name: string;
+  bank: string;
+  iban: string;
+  provider: AccountProvider;
+  count: number;
+  minDate: string;
+  maxDate: string;
+};
+
+export type Bank = { id: string; name: string };
+
+export type AppInfo = { hosted: boolean; packaged: boolean; downloadUrl: string };
+
+export type DateBounds = { minDate: string; maxDate: string };
+
+export type Meta = DateBounds & {
+  total: number;
+  uncategorized: number;
+  excluded: number;
+  categories: string[];
+  limits: CategoryLimitSetting[];
+  rules: CategoryRule[];
+  hasAiKey: boolean;
+  accounts: Account[];
+  banks: Bank[];
+  amountThresholds: number[];
+  app: AppInfo;
+};
+
+export type Institution = { id: string; name: string; logo: string };
+
+export type BankStatus = {
+  gocardless: {
+    hasSecrets: boolean;
+    requisitionId: string | null;
+    institutionId: string | null;
+    institutionName: string | null;
+  };
+  enablebanking: {
+    hasKeys: boolean;
+    appId: string;
+    redirectUrl: string;
+    sessions: { aspsp: string; validUntil: string; accounts: number }[];
+  };
+  accounts: Account[];
+};
+
+export type InsertResult = { imported: number; skipped: number; ids: string[] };
+
+export type AiCategorizeResult = { updated: number; groups: number; remaining: number };
+
+export type ImportResult = InsertResult &
+  DateBounds & {
+    total: number;
+    bank: string;
+    bankName: string;
+    account: Account;
+    accounts: Account[];
+    ai: AiCategorizeResult | null;
+  };
+
+export type DemoResult = InsertResult & DateBounds & { total: number; account: Account; accounts: Account[] };
+
+export type SyncResult = InsertResult & { accounts: number; total: number };
+
+export type TransactionsResult = DateBounds & {
+  items: Transaction[];
+  matched: number;
+  categories: string[];
+  total: number;
+};

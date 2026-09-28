@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import type { NextFunction, Request, Response } from "express";
-import { openDatabase, withDatabase } from "./db.ts";
+import { openDatabase, withDatabase } from "./db/index.ts";
 
 const COOKIE = "wydatki_sid";
 const IDLE_MS = 24 * 60 * 60 * 1000;

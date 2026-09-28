@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+import { evaluationKey } from "../../shared/domain.ts";
 import { api, getActiveAccount } from "../api";
-import { evaluationKey } from "../format";
-import { Icon } from "./Icon";
-import type { Period } from "./PeriodBar";
+import { errorMessage } from "../format";
+import type { Period } from "../period";
 import type { PeriodEvaluation } from "../types";
+import { Icon } from "./Icon";
 
 export type EvalFilters = {
   category?: string;
@@ -54,7 +55,7 @@ export function AiEvaluation({
       .catch((err: Error) => setError(err.message));
   }, []);
 
-  const current = evaluations.find((row) => row.scope === evaluationKey(period, filters, getActiveAccount()));
+  const current = evaluations.find((row) => row.scope === evaluationKey({ ...period, ...filters, account: getActiveAccount() }));
 
   async function generate() {
     setBusy(true);
@@ -71,7 +72,7 @@ export function AiEvaluation({
       setEvaluations(data.evaluations);
       setHasAiKey(data.hasAiKey);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Ocena AI nie powiodła się");
+      setError(errorMessage(err, "Ocena AI nie powiodła się"));
     } finally {
       setBusy(false);
     }

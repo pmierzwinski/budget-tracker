@@ -1,9 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { api } from "../api";
+import { useApp } from "../app/AppContext";
 import { Icon } from "../components/Icon";
-import { bankLabel, type Navigate } from "../components/Layout";
-import { Modal } from "../components/Modal";
-import type { Account, Bank } from "../types";
+import { BankSelect, NewAccountDialog } from "../components/NewAccountDialog";
+import { Notices } from "../components/ui/Notices";
+import { bankLabel } from "../format";
+import { useAction } from "../hooks/useAction";
+import { useFileDrop } from "../hooks/useFileDrop";
+import { demoAddedMessage } from "../messages";
 
 const HOW_TO: Record<string, string[]> = {
   pko: ["Zaloguj się do iPKO.", "Konto → Historia operacji.", "Ustaw zakres dat → Pobierz → CSV."],
@@ -17,59 +21,29 @@ const HOW_TO: Record<string, string[]> = {
   credit_agricole: ["Zaloguj się do CA24.", "Historia operacji → zakres dat.", "Eksport → CSV."],
 };
 
-function isCsvFile(file: File): boolean {
-  const name = file.name.toLowerCase();
-  const type = file.type.toLowerCase();
-  return name.endsWith(".csv") || name.endsWith(".txt") || type.includes("csv") || type === "text/plain";
-}
-
-export function ImportPage({
-  hosted,
-  accounts,
-  banks,
-  onNavigate,
-  onImported,
-}: {
-  hosted: boolean;
-  accounts: Account[];
-  banks: Bank[];
-  onNavigate: Navigate;
-  onImported: (accountId: string) => void;
-}) {
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [dragging, setDragging] = useState(false);
+export function ImportPage() {
+  const { meta, refreshMeta, account, chooseAccount, navigate } = useApp();
+  const { accounts, banks, hasAiKey } = meta;
+  const { busy, message, error, setMessage, setError, run } = useAction();
   const [replaceCsv, setReplaceCsv] = useState(false);
   const [useAi, setUseAi] = useState(false);
-  const [hasAiKey, setHasAiKey] = useState(false);
   const [target, setTarget] = useState("auto");
   const [bank, setBank] = useState("");
   const [creating, setCreating] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [newBank, setNewBank] = useState("pko");
   const inputRef = useRef<HTMLInputElement>(null);
   const zoneRef = useRef<HTMLDivElement>(null);
-  const dragDepth = useRef(0);
-  const busyRef = useRef(busy);
-  busyRef.current = busy;
-  const importRef = useRef<(file: File) => void>(() => undefined);
 
-  useEffect(() => {
-    api
-      .meta()
-      .then((meta) => setHasAiKey(Boolean(meta.hasAiKey)))
-      .catch(() => undefined);
-  }, []);
-
-  const targetAccount = accounts.find((account) => account.id === target);
+  const targetAccount = accounts.find((row) => row.id === target);
   const guideBank = bank || targetAccount?.bank || "pko";
 
-  async function handleFile(file: File) {
-    setBusy(true);
-    setError("");
-    setMessage("");
-    try {
+  /** New data landed on `accountId`: refresh the app and follow it when another account is active. */
+  async function imported(accountId: string) {
+    await refreshMeta();
+    if (account && accountId !== account) chooseAccount(accountId);
+  }
+
+  function handleFile(file: File) {
+    return run(async () => {
       const result = await api.importFile(file, {
         replaceCsv,
         ai: useAi && hasAiKey,
@@ -85,104 +59,18 @@ export function ImportPage({
       if (result.ai?.updated) parts.push(`AI skategoryzowało ${result.ai.updated} nowych płatności`);
       setMessage(`${parts.join("; ")}.`);
       setTarget(result.account.id);
-      onImported(result.account.id);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Import nie powiódł się");
-    } finally {
-      setBusy(false);
-    }
+      await imported(result.account.id);
+    }, "Import nie powiódł się");
   }
 
-  importRef.current = (file: File) => {
-    void handleFile(file);
-  };
+  const dragging = useFileDrop(zoneRef, { busy, onFile: (file) => void handleFile(file), onError: setError });
 
-  useEffect(() => {
-    const el = zoneRef.current;
-    if (!el) return;
-
-    const resetDrag = () => {
-      dragDepth.current = 0;
-      setDragging(false);
-    };
-
-    const onEnter = (event: DragEvent) => {
-      event.preventDefault();
-      event.stopPropagation();
-      dragDepth.current += 1;
-      if (!busyRef.current) setDragging(true);
-    };
-    const onOver = (event: DragEvent) => {
-      event.preventDefault();
-      event.stopPropagation();
-      if (event.dataTransfer) event.dataTransfer.dropEffect = busyRef.current ? "none" : "copy";
-    };
-    const onLeave = (event: DragEvent) => {
-      event.preventDefault();
-      event.stopPropagation();
-      dragDepth.current = Math.max(0, dragDepth.current - 1);
-      if (dragDepth.current === 0) setDragging(false);
-    };
-    const onDrop = (event: DragEvent) => {
-      event.preventDefault();
-      event.stopPropagation();
-      resetDrag();
-      if (busyRef.current) return;
-      const file = event.dataTransfer?.files?.[0];
-      if (!file) {
-        setError("Nie znaleziono pliku. Upuść plik CSV na to pole.");
-        return;
-      }
-      if (!isCsvFile(file)) {
-        setError("To nie wygląda na CSV. Wybierz eksport historii z bankowości (rozszerzenie .csv).");
-        return;
-      }
-      importRef.current(file);
-    };
-
-    el.addEventListener("dragenter", onEnter);
-    el.addEventListener("dragover", onOver);
-    el.addEventListener("dragleave", onLeave);
-    el.addEventListener("drop", onDrop);
-    return () => {
-      el.removeEventListener("dragenter", onEnter);
-      el.removeEventListener("dragover", onOver);
-      el.removeEventListener("dragleave", onLeave);
-      el.removeEventListener("drop", onDrop);
-    };
-  }, []);
-
-  async function createAccount() {
-    const name = newName.trim();
-    if (!name) return;
-    try {
-      const result = await api.createAccount({ name, bank: newBank });
-      setCreating(false);
-      setNewName("");
-      setTarget(result.account.id);
-      setBank(result.account.bank === "generic" ? "" : result.account.bank);
-      onImported(result.account.id);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Nie dodano konta");
-    }
-  }
-
-  async function loadDemo(uncategorized = false) {
-    setBusy(true);
-    setError("");
-    try {
+  function loadDemo(uncategorized = false) {
+    return run(async () => {
       const result = await api.importDemo({ uncategorized });
-      setMessage(
-        `Dodano „${result.account.name}” z ${result.imported} przykładowymi płatnościami z ostatnich 6 miesięcy${
-          uncategorized ? " — wszystkie w „Inne”" : ""
-        }. Usuniesz je w Ustawienia → Konta.`,
-      );
-      onImported(result.account.id);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Nie udało się wczytać przykładu");
-    } finally {
-      setBusy(false);
-    }
+      setMessage(`${demoAddedMessage(result, uncategorized)} Usuniesz je w Ustawienia → Konta.`);
+      await imported(result.account.id);
+    }, "Nie udało się wczytać przykładu");
   }
 
   async function clear(all: boolean) {
@@ -190,14 +78,11 @@ export function ImportPage({
       ? "Usunąć transakcje, konta, kategorie własne i reguły?"
       : "Usunąć wszystkie transakcje? Konta, kategorie i reguły zostaną.";
     if (!confirm(question)) return;
-    setError("");
-    try {
+    await run(async () => {
       await api.clear(all);
       setMessage(all ? "Wyczyszczono całą lokalną bazę wydatków." : "Wyczyszczono transakcje.");
-      onImported("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Nie udało się wyczyścić danych");
-    }
+      await imported("");
+    }, "Nie udało się wyczyścić danych");
   }
 
   return (
@@ -209,7 +94,7 @@ export function ImportPage({
         </div>
       </header>
 
-      {hosted ? (
+      {meta.app.hosted ? (
         <p className="banner ok">
           Wersja online: plik trafia tylko do Twojej tymczasowej sesji (znika po dobie bez aktywności) i nikt inny go nie
           widzi. Jeśli nie chcesz wysyłać wyciągu na serwer, pobierz aplikację — działa w całości na Twoim komputerze.
@@ -225,7 +110,6 @@ export function ImportPage({
                 value={target}
                 onChange={(e) => {
                   if (e.target.value === "__new") {
-                    setNewBank(bank || "pko");
                     setCreating(true);
                     return;
                   }
@@ -233,9 +117,9 @@ export function ImportPage({
                 }}
               >
                 <option value="auto">Wykryj automatycznie</option>
-                {accounts.map((account) => (
-                  <option key={account.id} value={account.id}>
-                    {account.name} · {bankLabel(banks, account.bank)}
+                {accounts.map((row) => (
+                  <option key={row.id} value={row.id}>
+                    {row.name} · {bankLabel(banks, row.bank)}
                   </option>
                 ))}
                 <option value="__new">+ Nowe konto…</option>
@@ -243,14 +127,7 @@ export function ImportPage({
             </label>
             <label className="field">
               Bank
-              <select value={bank} onChange={(e) => setBank(e.target.value)}>
-                <option value="">Rozpoznaj z pliku</option>
-                {banks.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
+              <BankSelect value={bank} onChange={setBank} banks={banks} detectOption="Rozpoznaj z pliku" />
             </label>
           </div>
           <p className="field-hint">
@@ -310,7 +187,7 @@ export function ImportPage({
                 ) : (
                   <small>
                     Wymaga klucza OpenAI —{" "}
-                    <button type="button" className="link-btn" onClick={() => onNavigate("settings", "ai")}>
+                    <button type="button" className="link-btn" onClick={() => navigate("settings", "ai")}>
                       ustaw klucz AI
                     </button>
                   </small>
@@ -329,12 +206,12 @@ export function ImportPage({
           {message ? (
             <div className="banner ok with-action">
               <span>{message}</span>
-              <button className="primary sm" type="button" onClick={() => onNavigate("transactions")}>
+              <button className="primary sm" type="button" onClick={() => navigate("transactions")}>
                 Zobacz płatności
               </button>
             </div>
           ) : null}
-          {error ? <p className="banner error">{error}</p> : null}
+          <Notices error={error} />
           <p className="card-foot">
             Ten sam plik możesz wgrać drugi raz — duplikaty są pomijane (data, kwota, odbiorca, opis), a kategorie
             zostają. Jeśli plik z Twojego banku się nie wczyta, wybierz bank ręcznie.
@@ -393,44 +270,19 @@ export function ImportPage({
         </div>
       </div>
 
-      <Modal
+      <NewAccountDialog
         open={creating}
-        title="Nowe konto"
         eyebrow="Import"
+        defaultBank={bank || "pko"}
         onClose={() => setCreating(false)}
-        onSubmit={() => void createAccount()}
-        footer={
-          <>
-            <button type="button" className="ghost" onClick={() => setCreating(false)}>
-              Anuluj
-            </button>
-            <button type="submit" className="primary" disabled={!newName.trim()}>
-              Dodaj konto
-            </button>
-          </>
-        }
-      >
-        <label className="field">
-          Nazwa
-          <input
-            autoFocus
-            maxLength={60}
-            value={newName}
-            placeholder="np. mBank wspólne, ING oszczędności"
-            onChange={(e) => setNewName(e.target.value)}
-          />
-        </label>
-        <label className="field">
-          Bank
-          <select value={newBank} onChange={(e) => setNewBank(e.target.value)}>
-            {banks.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      </Modal>
+        onError={setError}
+        onCreated={(created) => {
+          setCreating(false);
+          setTarget(created.id);
+          setBank(created.bank === "generic" ? "" : created.bank);
+          void imported(created.id);
+        }}
+      />
     </section>
   );
 }

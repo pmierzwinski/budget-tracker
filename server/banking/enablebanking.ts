@@ -1,11 +1,20 @@
-import { createHash, createSign, randomUUID } from "node:crypto";
+// Open Banking through Enable Banking (free private mode for your own accounts).
+import { createSign, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { categorizeWithUserRules, searchText } from "./categorize.ts";
-import { createAccount, findAccount, getSetting, hiddenCategoryNames, linkAccount, linkedAccounts, listRules, setSetting } from "./db.ts";
-import { serverEnv } from "./runtime.ts";
-import type { Transaction } from "./types.ts";
+import type { Institution, Transaction } from "../../shared/types.ts";
+import { getJsonSetting, getSetting, linkedAccounts, setJsonSetting, setSetting, upsertLinkedAccount, userCategorizer } from "../db/index.ts";
+import { apiUrl, publicUrl, serverEnv } from "../runtime.ts";
+import { hashId, newTransaction, utcDay } from "../transaction.ts";
+import type { Categorizer } from "../categorize.ts";
+import { providerFetch, sortInstitutions } from "./http.ts";
 
 const API = "https://api.enablebanking.com";
+const SESSIONS = "enablebanking_sessions";
+const PENDING = "enablebanking_state";
+const RETURN_TO = "enablebanking_return";
+
+/** The URL the user registers as "Redirect URL" in the Enable Banking panel. */
+export const enableBankingRedirect = `${apiUrl}/api/bank/enablebanking/callback`;
 
 type Session = { id: string; aspsp: string; validUntil: string; accounts: string[] };
 
@@ -23,7 +32,7 @@ function config() {
   return { appId, key };
 }
 
-export function hasEnableBankingKeys(): boolean {
+function hasKeys(): boolean {
   const { appId, key } = config();
   return Boolean(appId && key);
 }
@@ -44,6 +53,7 @@ function base64url(input: string | Buffer): string {
   return Buffer.from(input).toString("base64").replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
 }
 
+/** JWT RS256 signed with the application key (`kid` = Application ID). */
 function token(): string {
   const { appId, key } = config();
   if (!appId || !key) throw new Error("Brak kluczy Enable Banking. Wklej Application ID i klucz prywatny w Ustawieniach → Bank.");
@@ -63,60 +73,40 @@ function token(): string {
   return `${header}.${payload}.${base64url(signature)}`;
 }
 
-async function ebFetch(path: string, init: RequestInit = {}) {
-  const response = await fetch(`${API}${path}`, {
-    ...init,
-    headers: {
-      accept: "application/json",
-      "content-type": "application/json",
-      authorization: `Bearer ${token()}`,
-      ...(init.headers as Record<string, string> | undefined),
-    },
-  });
-  const text = await response.text();
-  let data: unknown = null;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    data = { raw: text };
-  }
-  if (!response.ok) {
-    const body = data as { message?: string; detail?: unknown; error?: string } | null;
-    const detail = body?.message || body?.error || (body?.detail ? JSON.stringify(body.detail) : text.slice(0, 300));
-    throw new Error(`Enable Banking ${response.status}: ${detail}`);
-  }
-  return data;
+function ebFetch(path: string, init: RequestInit = {}): Promise<unknown> {
+  return providerFetch(
+    "Enable Banking",
+    `${API}${path}`,
+    { ...init, headers: { authorization: `Bearer ${token()}`, ...(init.headers as Record<string, string>) } },
+    (body) => body?.message || body?.error || (body?.detail ? JSON.stringify(body.detail) : ""),
+  );
 }
 
-export async function listAspsps(): Promise<{ id: string; name: string; logo: string }[]> {
+export async function listAspsps(): Promise<Institution[]> {
   const data = (await ebFetch("/aspsps?country=PL&psu_type=personal")) as {
     aspsps?: { name: string; country: string; logo?: string }[];
   };
-  return (data.aspsps || [])
-    .map((item) => ({ id: item.name, name: item.name, logo: item.logo || "" }))
-    .sort((a, b) => a.name.localeCompare(b.name, "pl"));
+  return sortInstitutions((data.aspsps || []).map((item) => ({ id: item.name, name: item.name, logo: item.logo || "" })));
 }
 
 function sessions(): Session[] {
-  try {
-    return JSON.parse(getSetting("enablebanking_sessions") || "[]") as Session[];
-  } catch {
-    return [];
-  }
+  return getJsonSetting<Session[]>(SESSIONS, []);
 }
 
-export async function startEnableBanking(options: { aspsp: string; redirect: string }): Promise<{ link: string }> {
+/** Starts bank login; after the callback the user returns to `returnTo` (the frontend that clicked "Połącz"). */
+export async function startEnableBanking(options: { aspsp: string; returnTo: string }): Promise<{ link: string }> {
+  setSetting(RETURN_TO, options.returnTo);
   if (!options.aspsp) throw new Error("Wybierz bank.");
   const validUntil = new Date(Date.now() + 89 * 24 * 60 * 60 * 1000).toISOString();
   const state = randomUUID();
-  setSetting("enablebanking_state", JSON.stringify({ state, aspsp: options.aspsp }));
+  setJsonSetting(PENDING, { state, aspsp: options.aspsp });
   const data = (await ebFetch("/auth", {
     method: "POST",
     body: JSON.stringify({
       access: { valid_until: validUntil },
       aspsp: { name: options.aspsp, country: "PL" },
       state,
-      redirect_url: options.redirect,
+      redirect_url: enableBankingRedirect,
       psu_type: "personal",
       language: "pl",
     }),
@@ -132,8 +122,8 @@ type EbAccount = {
   currency?: string;
 };
 
-export async function finishEnableBanking(code: string, state: string): Promise<{ accounts: number }> {
-  const pending = JSON.parse(getSetting("enablebanking_state") || "{}") as { state?: string; aspsp?: string };
+async function finishEnableBanking(code: string, state: string): Promise<{ accounts: number }> {
+  const pending = getJsonSetting<{ state?: string; aspsp?: string }>(PENDING, {});
   if (!code) throw new Error("Bank nie zwrócił kodu autoryzacji.");
   if (pending.state && state && pending.state !== state) throw new Error("Niepoprawny parametr state — spróbuj połączyć się jeszcze raz.");
   const data = (await ebFetch("/sessions", { method: "POST", body: JSON.stringify({ code }) })) as {
@@ -146,22 +136,28 @@ export async function finishEnableBanking(code: string, state: string): Promise<
   const uids: string[] = [];
   for (const account of data.accounts || []) {
     const iban = account.account_id?.iban || account.account_id?.other?.identification || "";
-    const existing = findAccount({ provider: "enablebanking", externalId: account.uid, iban });
-    const local =
-      existing ||
-      createAccount({
-        name: `${aspsp}${account.name || account.product ? ` · ${account.name || account.product}` : ""}${iban ? ` ··${iban.slice(-4)}` : ""}`,
-        bank: aspsp,
-        iban,
-      });
-    linkAccount(local.id, { provider: "enablebanking", externalId: account.uid, iban });
+    upsertLinkedAccount("enablebanking", account.uid, { bank: aspsp, iban, label: account.name || account.product });
     uids.push(account.uid);
   }
   const next = sessions().filter((row) => row.aspsp !== aspsp);
   next.push({ id: data.session_id, aspsp, validUntil: data.access?.valid_until || "", accounts: uids });
-  setSetting("enablebanking_sessions", JSON.stringify(next));
-  setSetting("enablebanking_state", "");
+  setJsonSetting(SESSIONS, next);
+  setSetting(PENDING, "");
   return { accounts: uids.length };
+}
+
+/** Handles the bank's redirect; returns where to send the browser (with ?bank=connected or ?bank=error). */
+export async function enableBankingCallback(query: Record<string, unknown>): Promise<string> {
+  const back = getSetting(RETURN_TO) || publicUrl;
+  const failed = (message: string) => `${back}/?bank=error&message=${encodeURIComponent(message)}`;
+  const error = typeof query.error === "string" ? query.error : "";
+  if (error) return failed(String(query.error_description || error));
+  try {
+    await finishEnableBanking(String(query.code || ""), String(query.state || ""));
+    return `${back}/?bank=connected&provider=enablebanking`;
+  } catch (err) {
+    return failed(err instanceof Error ? err.message : "Nie udało się dokończyć połączenia");
+  }
 }
 
 type EbTransaction = {
@@ -179,40 +175,30 @@ type EbTransaction = {
   bank_transaction_code?: { description?: string };
 };
 
-function mapTx(raw: EbTransaction, accountId: string, iban: string): Transaction | null {
+/** Only booked, non-zero entries. */
+function mapTx(raw: EbTransaction, accountId: string, iban: string, categorize: Categorizer): Transaction | null {
   if (raw.status && raw.status !== "BOOK") return null;
   const value = Math.abs(Number(raw.transaction_amount?.amount || 0));
   if (!value) return null;
   const amount = raw.credit_debit_indicator === "DBIT" ? -value : value;
   const payee = (amount < 0 ? raw.creditor?.name : raw.debtor?.name) || raw.creditor?.name || raw.debtor?.name || "";
   const title = (raw.remittance_information || []).join(" ").replace(/\s+/g, " ").trim();
-  const bookingDate = raw.transaction_date || raw.booking_date || raw.value_date || new Date().toISOString().slice(0, 10);
-  const date = raw.value_date || raw.booking_date || bookingDate;
+  const bookingDate = raw.transaction_date || raw.booking_date || raw.value_date || utcDay();
   const type = raw.bank_transaction_code?.description || "Open Banking";
-  const external =
-    raw.entry_reference ||
-    raw.transaction_id ||
-    createHash("sha256").update(`${accountId}|${bookingDate}|${amount}|${payee}|${title}`).digest("hex").slice(0, 24);
-  const draft = { payee, title, description: title, type };
-  return {
-    id: createHash("sha256").update(`eb|${external}`).digest("hex").slice(0, 24),
-    date,
+  const external = raw.entry_reference || raw.transaction_id || hashId([accountId, bookingDate, amount, payee, title]);
+  const draft = { payee, title, description: title, type, amount };
+  return newTransaction({
+    ...draft,
+    id: hashId(["eb", external]),
+    date: raw.value_date || raw.booking_date || bookingDate,
     bookingDate,
-    amount,
-    currency: raw.transaction_amount?.currency || "PLN",
-    type,
-    payee,
-    title,
-    description: title,
+    currency: raw.transaction_amount?.currency,
     accountIban: iban,
     accountId,
-    category: categorizeWithUserRules(searchText(draft), amount, listRules(), hiddenCategoryNames()),
-    comment: "",
-    excluded: false,
+    category: categorize(draft),
     source: "enablebanking",
     externalId: `eb:${external}`,
-    createdAt: new Date().toISOString(),
-  };
+  });
 }
 
 async function fetchTransactions(uid: string, dateFrom: string): Promise<EbTransaction[]> {
@@ -232,23 +218,21 @@ async function fetchTransactions(uid: string, dateFrom: string): Promise<EbTrans
   return items;
 }
 
-function daysAgo(days: number): string {
-  return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-}
-
+/** New accounts fetch up to 2 years back (the bank may allow only 90 days), known ones the last 60 days. */
 export async function syncEnableBanking(): Promise<{ imported: Transaction[]; accounts: number }> {
   const linked = linkedAccounts("enablebanking");
   if (!linked.length) throw new Error("Brak połączonych kont. Najpierw połącz bank przez Enable Banking.");
+  const categorize = userCategorizer();
   const imported: Transaction[] = [];
   for (const account of linked) {
     let raw: EbTransaction[];
     try {
-      raw = await fetchTransactions(account.externalId, daysAgo(account.count ? 60 : 730));
+      raw = await fetchTransactions(account.externalId, utcDay(-(account.count ? 60 : 730)));
     } catch {
-      raw = await fetchTransactions(account.externalId, daysAgo(89));
+      raw = await fetchTransactions(account.externalId, utcDay(-89));
     }
     for (const item of raw) {
-      const tx = mapTx(item, account.id, account.iban);
+      const tx = mapTx(item, account.id, account.iban, categorize);
       if (tx) imported.push(tx);
     }
   }
@@ -256,10 +240,10 @@ export async function syncEnableBanking(): Promise<{ imported: Transaction[]; ac
 }
 
 export function enableBankingStatus() {
-  const { appId } = config();
   return {
-    hasKeys: hasEnableBankingKeys(),
-    appId,
+    hasKeys: hasKeys(),
+    appId: config().appId,
     sessions: sessions().map((row) => ({ aspsp: row.aspsp, validUntil: row.validUntil, accounts: row.accounts.length })),
+    redirectUrl: enableBankingRedirect,
   };
 }

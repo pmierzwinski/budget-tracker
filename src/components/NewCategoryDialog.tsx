@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { categoryColor } from "../format";
+import { categoryColor } from "../colors";
+import { errorMessage } from "../format";
 import type { CategoryScope } from "./CategorySelect";
 import { Modal } from "./Modal";
 
@@ -45,7 +46,7 @@ export function NewCategoryDialog({
       await onCreate(trimmed, scope);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Nie dodano kategorii");
+      setError(errorMessage(err, "Nie dodano kategorii"));
       setBusy(false);
     }
   }

@@ -1,0 +1,144 @@
+/* ---------- Transactions ---------- */
+
+.page.tx-page {
+  height: calc(100vh - var(--pad-y) - 2rem);
+  min-height: 560px;
+}
+
+.tx-page > * {
+  flex: 0 0 auto;
+}
+
+.tx-page > .tx-table {
+  flex: 1 1 auto;
+  min-height: 260px;
+}
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.65rem 0.75rem;
+}
+
+.search-field {
+  position: relative;
+  display: flex;
+  flex: 1 1 240px;
+  align-items: center;
+  min-width: 200px;
+}
+
+.search-field .icon {
+  position: absolute;
+  left: 0.7rem;
+  color: var(--faint);
+  pointer-events: none;
+}
+
+.search-field input {
+  width: 100%;
+  padding-left: 2.2rem;
+}
+
+.amount-range {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--faint);
+}
+
+.amount-range input {
+  width: 5.75rem;
+}
+
+.toggle-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 0.85rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.toggle-chip:hover {
+  background: var(--surface-2);
+}
+
+.toggle-chip.active {
+  border-color: #f0c75e;
+  background: var(--gold-soft);
+  color: #7a5300;
+}
+
+.toggle-chip.active .count {
+  background: #fbe7a6;
+  color: #7a5300;
+}
+
+.result-count {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.85rem;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.col-date {
+  width: 8.5rem;
+}
+
+.col-cat {
+  width: 16rem;
+}
+
+.tx-date {
+  color: var(--muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.tx-who {
+  max-width: 0;
+  width: 100%;
+}
+
+.tx-who strong {
+  display: block;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tx-desc {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.15rem 0.6rem;
+  margin-top: 0.1rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.tx-desc > span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty-row {
+  padding: 2.5rem 1rem;
+  text-align: center;
+}

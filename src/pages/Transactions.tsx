@@ -1,98 +1,95 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { DEFAULT_CATEGORY } from "../../shared/domain.ts";
 import { api } from "../api";
+import { useApp } from "../app/AppContext";
 import { CategorySelect } from "../components/CategorySelect";
 import { CommentNote } from "../components/CommentNote";
 import { ExcludeToggle } from "../components/ExcludeToggle";
 import { Icon } from "../components/Icon";
-import type { Navigate } from "../components/Layout";
-import { PeriodBar, allPeriod, type Period } from "../components/PeriodBar";
-import { formatDay, money, plural } from "../format";
-import type { Transaction } from "../types";
+import { PeriodBar } from "../components/PeriodBar";
+import { Notices } from "../components/ui/Notices";
+import { Segmented } from "../components/ui/Segmented";
+import { formatDay, money, plural, txName, txWho } from "../format";
+import { useAction } from "../hooks/useAction";
+import { usePeriod } from "../hooks/usePeriod";
+import { useTransactionEdits, type TransactionChange } from "../hooks/useTransactionEdits";
+import { useTransactionList } from "../hooks/useTransactionList";
+import { aiCategorizedMessage } from "../messages";
+import type { TxKind, TxSort } from "../types";
 
-const OTHER = "Inne";
 const ALL = "Wszystkie";
 
-type Kind = "all" | "expense" | "income";
-type Sort = "date_desc" | "date_asc" | "amount_desc" | "amount_asc" | "category_asc" | "category_desc";
-
-const KINDS: { id: Kind; label: string }[] = [
+const KINDS: { id: TxKind; label: string }[] = [
   { id: "all", label: "Wszystkie" },
   { id: "expense", label: "Wydatki" },
   { id: "income", label: "Przychody" },
 ];
 
-function arrow(sort: Sort, field: "date" | "amount" | "category") {
+type SortField = "date" | "amount" | "category";
+
+function arrow(sort: TxSort, field: SortField) {
   if (!sort.startsWith(field)) return "";
   return sort.endsWith("asc") ? " ↑" : " ↓";
 }
 
-export function Transactions({ onNavigate }: { onNavigate: Navigate }) {
-  const [period, setPeriod] = useState<Period>({ from: "", to: "" });
-  const [bounds, setBounds] = useState({ minDate: "", maxDate: "" });
+function savedMessage(change: TransactionChange): string {
+  if (change.type === "excluded") {
+    const who = change.item.payee || change.item.title || "Płatność";
+    return change.excluded
+      ? `„${who}” nie liczy się już do wykresów, limitów ani wydatków.`
+      : `„${who}” znów liczy się do statystyk.`;
+  }
+  if (change.type === "category" && change.scope === "merchant") {
+    const who = change.pattern || change.item.payee || change.item.title || "tego odbiorcy";
+    return `Kategoria „${change.category}” dla wszystkich płatności od „${who}” — zmieniono ${change.updated} ${plural(
+      change.updated,
+      "płatność",
+      "płatności",
+      "płatności",
+    )}. Przyszłe importy też tu trafią.`;
+  }
+  return "";
+}
+
+export function Transactions() {
+  const { meta, refreshMeta, navigate } = useApp();
+  const { period, setPeriod } = usePeriod("all");
   const [category, setCategory] = useState(ALL);
-  const [kind, setKind] = useState<Kind>("all");
+  const [kind, setKind] = useState<TxKind>("all");
   const [minAmount, setMinAmount] = useState("");
   const [maxAmount, setMaxAmount] = useState("");
-  const [sort, setSort] = useState<Sort>("date_desc");
+  const [sort, setSort] = useState<TxSort>("date_desc");
   const [q, setQ] = useState("");
-  const [items, setItems] = useState<Transaction[]>([]);
-  const [matched, setMatched] = useState(0);
-  const [categories, setCategories] = useState<string[]>([]);
-  const [error, setError] = useState("");
-  const [info, setInfo] = useState("");
-  const [busyAi, setBusyAi] = useState(false);
-  const [uncategorized, setUncategorized] = useState(0);
-  const [excludedCount, setExcludedCount] = useState(0);
   const [excludedOnly, setExcludedOnly] = useState(false);
-  const [hasAiKey, setHasAiKey] = useState(true);
+  const ai = useAction();
 
+  const list = useTransactionList(
+    () => api.transactions({ ...period, category, q, minAmount, maxAmount, kind, sort, excludedOnly }),
+    [period.from, period.to, category, q, minAmount, maxAmount, kind, sort, excludedOnly],
+    150,
+  );
+  const edits = useTransactionEdits({
+    updateItems: list.updateItems,
+    addCategory: list.addCategory,
+    onSaved: async (change) => {
+      ai.setError("");
+      if (change.type === "comment") return;
+      ai.setMessage(savedMessage(change));
+      await refreshMeta();
+    },
+    onFailed: (message) => {
+      ai.setError(message);
+      list.reload();
+    },
+  });
+
+  const { items, categories } = list;
+  const matched = list.data?.matched || 0;
   const filtered = Boolean(q || minAmount || maxAmount || kind !== "all" || category !== ALL || excludedOnly);
 
-  function applyMeta(meta: { uncategorized?: number; excluded?: number; hasAiKey?: boolean }) {
-    setUncategorized(meta.uncategorized || 0);
-    setExcludedCount(meta.excluded || 0);
-    setHasAiKey(Boolean(meta.hasAiKey));
-  }
-
-  async function load(nextPeriod = period) {
-    try {
-      const data = await api.transactions({
-        ...nextPeriod,
-        category,
-        q,
-        minAmount,
-        maxAmount,
-        kind,
-        sort,
-        excludedOnly,
-      });
-      setItems(data.items);
-      setMatched(data.matched);
-      setCategories(data.categories);
-      setBounds({ minDate: data.minDate, maxDate: data.maxDate });
-      applyMeta(await api.meta());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Błąd");
-    }
-  }
-
-  useEffect(() => {
-    api.meta().then((meta) => {
-      setBounds({ minDate: meta.minDate, maxDate: meta.maxDate });
-      applyMeta(meta);
-      setPeriod((current) => (current.from ? current : allPeriod(meta.minDate, meta.maxDate)));
-    });
-  }, []);
-
-  useEffect(() => {
-    if (!period.from && !period.to) return;
-    const timer = setTimeout(() => void load(), 150);
-    return () => clearTimeout(timer);
-  }, [period.from, period.to, category, q, minAmount, maxAmount, kind, sort, excludedOnly]);
-
-  function toggleSort(field: "date" | "amount" | "category") {
-    const desc = `${field}_desc` as Sort;
-    const asc = `${field}_asc` as Sort;
+  function toggleSort(field: SortField) {
+    const desc = `${field}_desc` as TxSort;
+    const asc = `${field}_asc` as TxSort;
     const first = field === "category" ? asc : desc;
     setSort(sort === first ? (first === asc ? desc : asc) : first);
   }
@@ -106,89 +103,32 @@ export function Transactions({ onNavigate }: { onNavigate: Navigate }) {
     setExcludedOnly(false);
   }
 
-  async function changeExcluded(item: Transaction, excluded: boolean) {
-    setError("");
-    setItems((current) => current.map((row) => (row.id === item.id ? { ...row, excluded } : row)));
-    setExcludedCount((current) => current + (excluded ? 1 : -1));
-    try {
-      await api.setExcluded(item.id, excluded);
-      setInfo(
-        excluded
-          ? `„${item.payee || item.title || "Płatność"}” nie liczy się już do wykresów, limitów ani wydatków.`
-          : `„${item.payee || item.title || "Płatność"}” znów liczy się do statystyk.`,
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Nie zapisano zmiany");
-      await load();
-    }
-  }
-
-  async function changeComment(item: Transaction, next: string) {
-    setError("");
-    setItems((current) => current.map((row) => (row.id === item.id ? { ...row, comment: next } : row)));
-    try {
-      await api.updateComment(item.id, next);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Nie zapisano komentarza");
-      await load();
-    }
-  }
-
-  async function changeCategory(item: Transaction, next: string, scope: "one" | "merchant") {
-    setError("");
-    setItems((current) => current.map((row) => (row.id === item.id ? { ...row, category: next } : row)));
-    try {
-      const result = await api.updateCategory(item.id, next, { onlyThis: scope === "one" });
-      setCategories((current) =>
-        current.includes(next) ? current : [...current.filter((name) => name !== OTHER), next, OTHER],
-      );
-      if (scope === "merchant") {
-        const who = result.pattern || item.payee || item.title || "tego odbiorcy";
-        setInfo(
-          `Kategoria „${next}” dla wszystkich płatności od „${who}” — zmieniono ${result.updated} ${plural(
-            result.updated,
-            "płatność",
-            "płatności",
-            "płatności",
-          )}. Przyszłe importy też tu trafią.`,
-        );
-        await load();
-      } else {
-        setInfo("");
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Nie zapisano kategorii");
-      await load();
-    }
-  }
-
-  async function categorizeWithAi() {
-    setBusyAi(true);
-    setError("");
-    try {
+  function categorizeWithAi() {
+    return ai.run(async () => {
       const result = await api.categorizeAi();
-      setInfo(
-        result.updated
-          ? `AI ustawiło kategorię dla ${result.updated} płatności. Zostało ${result.remaining} jako Inne.`
-          : "AI nie znalazło zmian — nic nie pasowało do istniejących kategorii.",
-      );
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Kategoryzacja AI nie powiodła się");
-    } finally {
-      setBusyAi(false);
-    }
+      ai.setMessage(aiCategorizedMessage(result));
+      list.reload();
+      await refreshMeta();
+    }, "Kategoryzacja AI nie powiodła się");
+  }
+
+  function sortButton(field: SortField, label: string, title?: string) {
+    return (
+      <button
+        type="button"
+        className={sort.startsWith(field) ? "th-sort active" : "th-sort"}
+        title={title}
+        onClick={() => toggleSort(field)}
+      >
+        {label}
+        {arrow(sort, field)}
+      </button>
+    );
   }
 
   return (
     <section className="page tx-page">
-      <PeriodBar
-        page="Płatności"
-        period={period}
-        minDate={bounds.minDate}
-        maxDate={bounds.maxDate}
-        onChange={setPeriod}
-      />
+      <PeriodBar page="Płatności" period={period} onChange={setPeriod} />
 
       <div className="card filter-bar">
         <label className="search-field">
@@ -201,19 +141,7 @@ export function Transactions({ onNavigate }: { onNavigate: Navigate }) {
             onChange={(e) => setQ(e.target.value)}
           />
         </label>
-        <div className="segmented" role="group" aria-label="Rodzaj operacji">
-          {KINDS.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              className={kind === option.id ? "active" : undefined}
-              aria-pressed={kind === option.id}
-              onClick={() => setKind(option.id)}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
+        <Segmented options={KINDS} value={kind} onChange={setKind} label="Rodzaj operacji" />
         <select aria-label="Kategoria" value={category} onChange={(e) => setCategory(e.target.value)}>
           <option value={ALL}>Wszystkie kategorie</option>
           {categories.map((item) => (
@@ -239,14 +167,14 @@ export function Transactions({ onNavigate }: { onNavigate: Navigate }) {
         </div>
         <button
           type="button"
-          className={category === OTHER ? "toggle-chip active" : "toggle-chip"}
-          aria-pressed={category === OTHER}
+          className={category === DEFAULT_CATEGORY ? "toggle-chip active" : "toggle-chip"}
+          aria-pressed={category === DEFAULT_CATEGORY}
           title="Płatności bez kategorii (Inne)"
-          onClick={() => setCategory(category === OTHER ? ALL : OTHER)}
+          onClick={() => setCategory(category === DEFAULT_CATEGORY ? ALL : DEFAULT_CATEGORY)}
         >
-          Nieskategoryzowane <span className="count">{uncategorized}</span>
+          Nieskategoryzowane <span className="count">{meta.uncategorized}</span>
         </button>
-        {excludedCount || excludedOnly ? (
+        {meta.excluded || excludedOnly ? (
           <button
             type="button"
             className={excludedOnly ? "toggle-chip active" : "toggle-chip"}
@@ -255,21 +183,21 @@ export function Transactions({ onNavigate }: { onNavigate: Navigate }) {
             onClick={() => setExcludedOnly(!excludedOnly)}
           >
             <Icon name="eyeOff" size={14} />
-            Ukryte <span className="count">{excludedCount}</span>
+            Ukryte <span className="count">{meta.excluded}</span>
           </button>
         ) : null}
-        {uncategorized ? (
-          hasAiKey ? (
-            <button type="button" className="primary" disabled={busyAi} onClick={() => void categorizeWithAi()}>
+        {meta.uncategorized ? (
+          meta.hasAiKey ? (
+            <button type="button" className="primary" disabled={ai.busy} onClick={() => void categorizeWithAi()}>
               <Icon name="sparkle" size={16} />
-              {busyAi ? "AI kategoryzuje…" : "Skategoryzuj przez AI"}
+              {ai.busy ? "AI kategoryzuje…" : "Skategoryzuj przez AI"}
             </button>
           ) : (
             <button
               type="button"
               className="ghost ai-setup"
               title="Kategoryzacja AI wymaga klucza OpenAI"
-              onClick={() => onNavigate("settings", "ai")}
+              onClick={() => navigate("settings", "ai")}
             >
               <Icon name="sparkle" size={16} />
               Ustaw klucz AI, żeby kategoryzować
@@ -286,34 +214,22 @@ export function Transactions({ onNavigate }: { onNavigate: Navigate }) {
         </span>
       </div>
 
-      {error ? <p className="banner error">{error}</p> : null}
-      {info ? <p className="banner ok">{info}</p> : null}
+      <Notices error={ai.error || list.error} message={ai.message} />
 
       <div className="table-wrap tx-table">
         <table>
           <thead>
             <tr>
-              <th className="col-date">
-                <button type="button" className={sort.startsWith("date") ? "th-sort active" : "th-sort"} onClick={() => toggleSort("date")}>
-                  Data{arrow(sort, "date")}
-                </button>
-              </th>
+              <th className="col-date">{sortButton("date", "Data")}</th>
               <th>Odbiorca / opis</th>
               <th className="col-cat">
-                <button
-                  type="button"
-                  className={sort.startsWith("category") ? "th-sort active" : "th-sort"}
-                  title="Zmiana na liście dotyczy tylko tej płatności. „Wszystkie od odbiorcy…” ustawia kategorię dla wszystkich płatności od tego odbiorcy, także przyszłych."
-                  onClick={() => toggleSort("category")}
-                >
-                  Kategoria{arrow(sort, "category")}
-                </button>
+                {sortButton(
+                  "category",
+                  "Kategoria",
+                  "Zmiana na liście dotyczy tylko tej płatności. „Wszystkie od odbiorcy…” ustawia kategorię dla wszystkich płatności od tego odbiorcy, także przyszłych.",
+                )}
               </th>
-              <th className="num">
-                <button type="button" className={sort.startsWith("amount") ? "th-sort active" : "th-sort"} onClick={() => toggleSort("amount")}>
-                  Kwota{arrow(sort, "amount")}
-                </button>
-              </th>
+              <th className="num">{sortButton("amount", "Kwota")}</th>
             </tr>
           </thead>
           <tbody>
@@ -322,27 +238,26 @@ export function Transactions({ onNavigate }: { onNavigate: Navigate }) {
               return (
                 <tr
                   key={item.id}
-                  className={[item.category === OTHER ? "uncat" : "", item.excluded ? "excluded" : ""].join(" ").trim() || undefined}
+                  className={
+                    [item.category === DEFAULT_CATEGORY ? "uncat" : "", item.excluded ? "excluded" : ""].join(" ").trim() ||
+                    undefined
+                  }
                 >
                   <td className="tx-date">{formatDay(item.date)}</td>
                   <td className="tx-who">
-                    <strong title={item.payee || undefined}>{item.payee || item.type || "Operacja"}</strong>
+                    <strong title={item.payee || undefined}>{txName(item)}</strong>
                     <div className="tx-desc">
                       {description ? <span title={description}>{description}</span> : null}
-                      <CommentNote
-                        compact
-                        value={item.comment || ""}
-                        onSave={(next) => void changeComment(item, next)}
-                      />
-                      <ExcludeToggle compact excluded={item.excluded} onToggle={(next) => void changeExcluded(item, next)} />
+                      <CommentNote compact value={item.comment || ""} onSave={(next) => void edits.changeComment(item, next)} />
+                      <ExcludeToggle compact excluded={item.excluded} onToggle={(next) => void edits.changeExcluded(item, next)} />
                     </div>
                   </td>
                   <td>
                     <CategorySelect
                       value={item.category}
                       categories={categories}
-                      who={item.payee || item.title || item.type || ""}
-                      onChange={(next, scope) => void changeCategory(item, next, scope)}
+                      who={txWho(item)}
+                      onChange={(next, scope) => void edits.changeCategory(item, next, scope)}
                     />
                   </td>
                   <td className={item.amount < 0 ? "num neg strong" : "num pos strong"}>{money(item.amount)}</td>

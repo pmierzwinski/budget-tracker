@@ -1,10 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../api";
+import { useApp } from "../../app/AppContext";
+import type { BankCallback } from "../../app/navigation";
 import { Icon } from "../../components/Icon";
-import { bankLabel } from "../../components/Layout";
-import { formatDay } from "../../format";
-import type { BankCallback } from "../../main";
+import { Notices } from "../../components/ui/Notices";
+import { Segmented } from "../../components/ui/Segmented";
+import { bankLabel, formatDay } from "../../format";
+import { useAction } from "../../hooks/useAction";
 import type { Account, Bank, BankStatus, Institution } from "../../types";
+
+const PROVIDERS = [
+  { id: "enablebanking", label: "Enable Banking" },
+  { id: "gocardless", label: "GoCardless" },
+] as const;
 
 type Provider = "enablebanking" | "gocardless";
 
@@ -44,17 +52,9 @@ function LinkedAccounts({ accounts, banks, provider }: { accounts: Account[]; ba
   );
 }
 
-export function BankTab({
-  banks,
-  callback,
-  onCallbackDone,
-  onAccountsChanged,
-}: {
-  banks: Bank[];
-  callback: BankCallback;
-  onCallbackDone: () => void;
-  onAccountsChanged: () => void | Promise<void>;
-}) {
+export function BankTab({ callback, onCallbackDone }: { callback: BankCallback; onCallbackDone: () => void }) {
+  const { meta, refreshMeta } = useApp();
+  const banks = meta.banks;
   const [status, setStatus] = useState<BankStatus | null>(null);
   const [provider, setProvider] = useState<Provider>(callback?.provider || "enablebanking");
   const [institutions, setInstitutions] = useState<Institution[]>([]);
@@ -65,9 +65,7 @@ export function BankTab({
   const [secretKey, setSecretKey] = useState("");
   const [sandbox, setSandbox] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState(callback?.error || "");
+  const { busy, message, error, setMessage, setError, run } = useAction();
   const handledCallback = useRef(false);
 
   async function refresh() {
@@ -77,6 +75,7 @@ export function BankTab({
   }
 
   useEffect(() => {
+    if (callback?.error) setError(callback.error);
     refresh()
       .then((next) => {
         if (callback?.provider) return;
@@ -92,19 +91,13 @@ export function BankTab({
       onCallbackDone();
       return;
     }
-    setBusy(true);
-    api
-      .sync(callback.provider)
-      .then(async (result) => {
-        setMessage(`Połączono z bankiem. Pobrano ${result.imported} nowych transakcji z ${result.accounts} kont.`);
-        await refresh();
-        await onAccountsChanged();
-      })
-      .catch((err: Error) => setError(err.message))
-      .finally(() => {
-        setBusy(false);
-        onCallbackDone();
-      });
+    const provider = callback.provider;
+    void run(async () => {
+      const result = await api.sync(provider);
+      setMessage(`Połączono z bankiem. Pobrano ${result.imported} nowych transakcji z ${result.accounts} kont.`);
+      await refresh();
+      await refreshMeta();
+    }, "Synchronizacja nie powiodła się").finally(onCallbackDone);
   }, [callback]);
 
   const configured =
@@ -140,19 +133,6 @@ export function BankTab({
     setMessage("");
   }
 
-  async function run(action: () => Promise<void>, fallback: string) {
-    setBusy(true);
-    setError("");
-    setMessage("");
-    try {
-      await action();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : fallback);
-    } finally {
-      setBusy(false);
-    }
-  }
-
   function saveEbKeys() {
     return run(async () => {
       await api.ebSaveKeys(appId.trim(), privateKey.trim());
@@ -171,20 +151,15 @@ export function BankTab({
     }, "Nie zapisano kluczy");
   }
 
-  async function connect() {
-    setBusy(true);
-    setError("");
-    try {
+  function connect() {
+    return run(async () => {
       const picked = institutions.find((item) => item.id === institution);
       const { link } =
         provider === "enablebanking"
           ? await api.ebConnect(institution)
           : await api.gcConnect({ sandbox, institutionId: picked?.id, institutionName: picked?.name });
       window.location.href = link;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Nie udało się połączyć");
-      setBusy(false);
-    }
+    }, "Nie udało się połączyć");
   }
 
   function sync() {
@@ -192,7 +167,7 @@ export function BankTab({
       const result = await api.sync(provider);
       setMessage(`Synchronizacja: ${result.imported} nowych, ${result.skipped} już było, kont: ${result.accounts}.`);
       await refresh();
-      await onAccountsChanged();
+      await refreshMeta();
     }, "Synchronizacja nie powiodła się");
   }
 
@@ -224,24 +199,7 @@ export function BankTab({
   return (
     <>
       <div className="provider-switch">
-        <div className="segmented" role="group" aria-label="Dostawca Open Banking">
-          <button
-            type="button"
-            className={provider === "enablebanking" ? "active" : undefined}
-            aria-pressed={provider === "enablebanking"}
-            onClick={() => switchProvider("enablebanking")}
-          >
-            Enable Banking
-          </button>
-          <button
-            type="button"
-            className={provider === "gocardless" ? "active" : undefined}
-            aria-pressed={provider === "gocardless"}
-            onClick={() => switchProvider("gocardless")}
-          >
-            GoCardless
-          </button>
-        </div>
+        <Segmented options={PROVIDERS} value={provider} onChange={switchProvider} label="Dostawca Open Banking" />
         <span className="muted">
           {provider === "enablebanking"
             ? "Zalecane — darmowe dla własnych kont, przyjmuje nowe rejestracje."
@@ -315,8 +273,7 @@ export function BankTab({
               <p className="muted">Ostatnie połączenie: {gc.institutionName}</p>
             ) : null}
             <LinkedAccounts accounts={status?.accounts || []} banks={banks} provider={provider} />
-            {message ? <p className="banner ok">{message}</p> : null}
-            {error ? <p className="banner error">{error}</p> : null}
+            <Notices message={message} error={error} />
           </article>
 
           {provider === "enablebanking" ? (

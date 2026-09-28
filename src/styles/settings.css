@@ -1,0 +1,151 @@
+/* ---------- Settings ---------- */
+
+.settings-head {
+  flex-wrap: wrap;
+}
+
+.settings-tabs {
+  flex-wrap: wrap;
+}
+
+.settings-tabs button {
+  padding: 0.45rem 0.85rem;
+  font-size: 0.86rem;
+}
+
+.cat-limit {
+  justify-self: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.feature-list {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0 0 0 1.1rem;
+  color: var(--ink-2);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.account-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.account-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.7rem 0.5rem;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.account-list li:last-child {
+  border-bottom: 0;
+}
+
+.account-list li:hover {
+  background: var(--surface-2);
+}
+
+.account-list li.editing {
+  grid-template-columns: auto minmax(0, 1fr);
+  background: var(--surface-2);
+}
+
+.account-info {
+  display: grid;
+  min-width: 0;
+}
+
+.account-info strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-info .muted {
+  overflow: hidden;
+  font-size: 0.8rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.iban {
+  font-variant-numeric: tabular-nums;
+}
+
+.account-range {
+  display: grid;
+  justify-items: end;
+  font-size: 0.8rem;
+}
+
+.account-edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.account-edit input {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.empty-card.inline {
+  max-width: none;
+  padding: 1rem 0;
+  border: 0;
+  box-shadow: none;
+}
+
+.threshold-form {
+  display: grid;
+  gap: 1.1rem;
+}
+
+.threshold-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.money-input.threshold {
+  width: 9rem;
+  padding-right: 0.1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.money-input.threshold input {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+}
+
+.money-input.threshold .icon-btn {
+  width: 24px;
+  height: 24px;
+}
+
+.money-input.threshold .icon-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.threshold-preview {
+  display: grid;
+  gap: 0.45rem;
+  font-size: 0.8rem;
+}
+
+.threshold-preview .row {
+  gap: 0.35rem;
+}

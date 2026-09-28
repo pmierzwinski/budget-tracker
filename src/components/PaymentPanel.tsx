@@ -2,16 +2,22 @@ import { CategorySelect, type CategoryScope } from "./CategorySelect";
 import { CommentNote } from "./CommentNote";
 import { ExcludeToggle } from "./ExcludeToggle";
 import { Icon } from "./Icon";
-import { categoryColor, money, shortDate } from "../format";
-import type { Transaction } from "../types";
+import { DEFAULT_CATEGORY } from "../../shared/domain.ts";
+import { categoryColor } from "../colors";
+import { money, shortDate, txName, txWho } from "../format";
+import type { Transaction, TxSort } from "../types";
 
-export type PaySort =
-  | "amount_desc"
-  | "amount_asc"
-  | "category_asc"
-  | "category_desc"
-  | "date_desc"
-  | "date_asc";
+export type PaySort = TxSort;
+
+function FilterChip({ label, color, onRemove }: { label: string; color?: string; onRemove?: () => void }) {
+  return (
+    <button type="button" className="filter-chip" title="Usuń filtr" onClick={onRemove}>
+      {color ? <span className="dot" style={{ background: color }} /> : null}
+      {label}
+      <Icon name="close" size={13} />
+    </button>
+  );
+}
 
 export function PaymentPanel({
   items,
@@ -78,30 +84,10 @@ export function PaymentPanel({
         {categoryFilter?.length || amountFilter || weekdayFilter ? (
           <div className="filter-chips">
             {categoryFilter?.map((name) => (
-              <button
-                type="button"
-                key={name}
-                className="filter-chip"
-                title="Usuń filtr"
-                onClick={() => onRemoveCategory?.(name)}
-              >
-                <span className="dot" style={{ background: categoryColor(name) }} />
-                {name}
-                <Icon name="close" size={13} />
-              </button>
+              <FilterChip key={name} label={name} color={categoryColor(name)} onRemove={() => onRemoveCategory?.(name)} />
             ))}
-            {amountFilter ? (
-              <button type="button" className="filter-chip" title="Usuń filtr" onClick={onClearAmount}>
-                {amountFilter}
-                <Icon name="close" size={13} />
-              </button>
-            ) : null}
-            {weekdayFilter ? (
-              <button type="button" className="filter-chip" title="Usuń filtr" onClick={onClearWeekday}>
-                {weekdayFilter}
-                <Icon name="close" size={13} />
-              </button>
-            ) : null}
+            {amountFilter ? <FilterChip label={amountFilter} onRemove={onClearAmount} /> : null}
+            {weekdayFilter ? <FilterChip label={weekdayFilter} onRemove={onClearWeekday} /> : null}
             {(categoryFilter?.length || 0) > 1 ? (
               <button type="button" className="link-btn quiet" onClick={onClearFilter}>
                 Wyczyść
@@ -116,12 +102,12 @@ export function PaymentPanel({
           return (
             <article
               key={item.id}
-              className={`pay-row${item.category === "Inne" ? " uncat" : ""}${item.excluded ? " excluded" : ""}`}
+              className={`pay-row${item.category === DEFAULT_CATEGORY ? " uncat" : ""}${item.excluded ? " excluded" : ""}`}
             >
               <span className="pay-row-mark" style={{ background: color }} />
               <div className="pay-body">
                 <strong className="who" title={item.payee || item.type || undefined}>
-                  {item.payee || item.type || "Operacja"}
+                  {txName(item)}
                 </strong>
                 <div className="pay-meta">
                   <span className="pay-date">{shortDate(item.date)}</span>
@@ -129,7 +115,7 @@ export function PaymentPanel({
                     compact
                     value={item.category}
                     categories={categories}
-                    who={item.payee || item.title || item.type || ""}
+                    who={txWho(item)}
                     onChange={(next, scope) => onCategoryChange(item, next, scope)}
                   />
                   {item.title ? (

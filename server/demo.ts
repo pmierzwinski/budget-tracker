@@ -1,6 +1,14 @@
-import { createHash } from "node:crypto";
-import { DEFAULT_CATEGORY, categorizeWithUserRules, searchText, type CategoryRule } from "./categorize.ts";
-import type { Transaction } from "./types.ts";
+// "Konto testowe": ~6 months of sample payments ending today (seeded, so the same every time on a given day).
+import { DEFAULT_CATEGORY } from "../shared/domain.ts";
+import { isoDate } from "../shared/dates.ts";
+import { round2 } from "../shared/numbers.ts";
+import type { DemoResult, Transaction } from "../shared/types.ts";
+import type { Categorizer } from "./categorize.ts";
+import { createAccount, dateBounds, deleteAccountByName, getAccount, insertTransactions, listAccounts, userCategorizer } from "./db/index.ts";
+import { hashId, newTransaction } from "./transaction.ts";
+
+export const DEMO_ACCOUNT = "Konto testowe";
+export const DEMO_RAW_ACCOUNT = "Konto testowe bez kategorii";
 
 type Draft = { date: string; amount: number; type: string; payee: string; title: string; city?: string };
 
@@ -39,24 +47,20 @@ function random(seed: number) {
   };
 }
 
-function iso(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-
-export function demoTransactions(
+function demoTransactions(
   accountId: string,
-  options: { rules: CategoryRule[]; blocked: Iterable<string>; months?: number; uncategorized?: boolean },
+  options: { categorize: Categorizer; months?: number; uncategorized?: boolean },
 ): Transaction[] {
   const rand = random(20260927);
   const end = new Date();
-  const todayIso = iso(end);
+  const todayIso = isoDate(end);
   const months = options.months || 6;
   const drafts: Draft[] = [];
   for (let back = months - 1; back >= 0; back -= 1) {
     const year = end.getFullYear();
     const month = end.getMonth() - back;
     const days = new Date(year, month + 1, 0).getDate();
-    const at = (day: number) => iso(new Date(year, month, Math.min(day, days)));
+    const at = (day: number) => isoDate(new Date(year, month, Math.min(day, days)));
     for (const row of MONTHLY) {
       if (row.payee === "CITYFIT" && back < 2) continue;
       const amount = row.payee.startsWith("PGE") ? -Math.round(110 + rand() * 70) : row.amount;
@@ -65,7 +69,7 @@ export function demoTransactions(
     for (const shop of SHOPS) {
       const count = Math.floor(shop.perMonth + rand());
       for (let i = 0; i < count; i += 1) {
-        const amount = -Math.round((shop.min + rand() * (shop.max - shop.min)) * 100) / 100;
+        const amount = -round2(shop.min + rand() * (shop.max - shop.min));
         drafts.push({ date: at(1 + Math.floor(rand() * days)), amount, type: "Płatność kartą", payee: shop.payee, title: "", city: "WARSZAWA" });
       }
     }
@@ -89,31 +93,34 @@ export function demoTransactions(
       ]
         .filter(Boolean)
         .join(" ");
-      const id = createHash("sha256")
-        .update(["demo", accountId, draft.date, draft.amount, draft.payee, index].join("|"))
-        .digest("hex")
-        .slice(0, 24);
-      const base = { payee: draft.payee, title: draft.title, description, type: draft.type };
-      return {
+      const id = hashId(["demo", accountId, draft.date, draft.amount, draft.payee, index]);
+      const base = { payee: draft.payee, title: draft.title, description, type: draft.type, amount: draft.amount };
+      return newTransaction({
+        ...base,
         id,
         date: draft.date,
         bookingDate: draft.date,
-        amount: draft.amount,
-        currency: "PLN",
-        type: draft.type,
-        payee: draft.payee,
-        title: draft.title,
-        description,
-        accountIban: "",
         accountId,
-        category: options.uncategorized
-          ? DEFAULT_CATEGORY
-          : categorizeWithUserRules(searchText(base), draft.amount, options.rules, options.blocked),
-        comment: "",
-        excluded: false,
-        source: "demo" as const,
+        category: options.uncategorized ? DEFAULT_CATEGORY : options.categorize(base),
+        source: "demo",
         externalId: `demo:${id}`,
         createdAt: now,
-      };
+      });
     });
+}
+
+/** Recreates the demo account (by name); `uncategorized` puts everything in "Inne" to try rules and AI. */
+export function resetDemoAccount(options: { uncategorized?: boolean } = {}): DemoResult {
+  const name = options.uncategorized ? DEMO_RAW_ACCOUNT : DEMO_ACCOUNT;
+  deleteAccountByName(name);
+  const account = createAccount({ name, bank: "generic" });
+  const items = demoTransactions(account.id, { categorize: userCategorizer(), uncategorized: options.uncategorized });
+  const result = insertTransactions(items);
+  return {
+    ...result,
+    total: items.length,
+    account: getAccount(account.id)!,
+    accounts: listAccounts(),
+    ...dateBounds(),
+  };
 }

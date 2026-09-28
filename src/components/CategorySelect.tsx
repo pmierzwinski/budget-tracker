@@ -1,9 +1,8 @@
 import { useState } from "react";
-import { categoryColor } from "../format";
+import { DEFAULT_CATEGORY } from "../../shared/domain.ts";
+import { categoryColor } from "../colors";
 import { Modal } from "./Modal";
 import { NewCategoryDialog } from "./NewCategoryDialog";
-
-const OTHER = "Inne";
 
 export type CategoryScope = "one" | "merchant";
 
@@ -86,7 +85,7 @@ export function CategorySelect({
   return (
     <div className={compact ? "cat-edit compact" : "cat-edit"}>
       <select
-        className={`cat${compact ? " compact" : ""}${value === OTHER ? " uncat" : ""}`}
+        className={`cat${compact ? " compact" : ""}${value === DEFAULT_CATEGORY ? " uncat" : ""}`}
         style={{ borderColor: categoryColor(value) }}
         value={value}
         aria-label="Kategoria tej płatności"

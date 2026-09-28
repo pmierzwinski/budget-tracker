@@ -1,26 +1,8 @@
-export const DEFAULT_CATEGORY = "Inne";
-
-export const BUILTIN_CATEGORIES = [
-  "Spożywcze",
-  "Jedzenie na mieście",
-  "Paliwo",
-  "Transport",
-  "Rachunki",
-  "Mieszkanie",
-  "Zdrowie",
-  "Odzież",
-  "Rozrywka",
-  "Subskrypcje",
-  "Inwestycje",
-  "Finanse",
-  "Przelewy",
-  "Wynagrodzenie",
-  "Inne",
-] as const;
+// Built-in regex rules and categorization with user rules on top.
+import { DEFAULT_CATEGORY, type BuiltinCategory } from "../shared/domain.ts";
+import type { CategoryRule } from "../shared/types.ts";
 
 export const LEGACY_SKIP_CATEGORY = "Poza statystykami";
-
-export type BuiltinCategory = (typeof BUILTIN_CATEGORIES)[number];
 
 const RULES: { category: BuiltinCategory; patterns: RegExp[] }[] = [
   {
@@ -170,9 +152,13 @@ const RULES: { category: BuiltinCategory; patterns: RegExp[] }[] = [
   },
 ];
 
-export type CategoryRule = { pattern: string; category: string };
+export type RulePattern = Pick<CategoryRule, "pattern" | "category">;
 
-export function categorizeBuiltin(text: string, amount: number): string {
+type Describable = { payee: string; title: string; description: string; type: string };
+
+export type Categorizer = (tx: Describable & { amount: number }) => string;
+
+function categorizeBuiltin(text: string, amount: number): string {
   const haystack = text.replace(/\s+/g, " ");
   for (const rule of RULES) {
     if (rule.patterns.some((p) => p.test(haystack))) return rule.category;
@@ -182,10 +168,11 @@ export function categorizeBuiltin(text: string, amount: number): string {
   return DEFAULT_CATEGORY;
 }
 
+/** First matching user rule wins, then the built-in regexes; hidden categories end up in "Inne". */
 export function categorizeWithUserRules(
   text: string,
   amount: number,
-  rules: CategoryRule[],
+  rules: RulePattern[],
   blocked?: Iterable<string>,
 ): string {
   const haystack = text.replace(/\s+/g, " ").toLowerCase();
@@ -204,21 +191,11 @@ export function categorizeWithUserRules(
   return next;
 }
 
-export function searchText(tx: {
-  payee: string;
-  title: string;
-  description: string;
-  type: string;
-}): string {
-  return [tx.payee, tx.title, tx.description, tx.type].filter(Boolean).join(" ");
+export function categorizer(rules: RulePattern[], blocked: Iterable<string> = []): Categorizer {
+  const hidden = new Set(blocked);
+  return (tx) => categorizeWithUserRules(searchText(tx), tx.amount, rules, hidden);
 }
 
-export function suggestPattern(text: string): string {
-  const cleaned = text
-    .replace(/^www\./i, "")
-    .replace(/^https?:\/\//i, "")
-    .replace(/[.,;:]+$/g, "")
-    .trim();
-  const token = cleaned.split(/[\s,/|]+/).find((part) => part.replace(/[.\d]/g, "").length >= 3);
-  return (token || cleaned).slice(0, 40);
+export function searchText(tx: Describable): string {
+  return [tx.payee, tx.title, tx.description, tx.type].filter(Boolean).join(" ");
 }

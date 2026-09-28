@@ -1,0 +1,130 @@
+/* ---------- Category select & notes ---------- */
+
+.cat-edit {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+select.cat {
+  min-width: 10.5rem;
+  min-height: 32px;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.82rem;
+  box-shadow: none;
+}
+
+select.cat.uncat {
+  background: #fffbf2;
+  font-weight: 600;
+}
+
+select.cat.compact {
+  min-width: 0;
+  max-width: 12rem;
+  min-height: 0;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.74rem;
+}
+
+.cat-merchant {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.75rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.cat-merchant:hover,
+.cat-merchant:focus-visible {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.cat-edit.compact .cat-merchant {
+  font-size: 0.7rem;
+}
+
+.pay-note {
+  max-width: 16ch;
+  padding: 0.05rem 0.5rem;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: var(--gold-soft);
+  color: #7a5300;
+  font-size: 0.74rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pay-note.compact {
+  max-width: 14ch;
+  font-size: 0.7rem;
+}
+
+.pay-note.empty {
+  max-width: none;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.pay-note.empty:hover,
+.pay-note.empty:focus-visible {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+input.pay-note-input {
+  width: 11rem;
+  max-width: 100%;
+  min-height: 0;
+  padding: 0.08rem 0.5rem;
+  border-color: var(--gold);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  box-shadow: none;
+}
+
+input.pay-note-input.compact {
+  width: 9rem;
+  font-size: 0.72rem;
+}
+
+@media (hover: hover) {
+  .pay-row .pay-note.empty,
+  .pay-row .cat-merchant,
+  .tx-table tbody tr .pay-note.empty,
+  .tx-table tbody tr .cat-merchant {
+    opacity: 0;
+    transition: opacity 0.12s;
+  }
+
+  .pay-row:hover .pay-note.empty,
+  .pay-row:focus-within .pay-note.empty,
+  .pay-row:hover .cat-merchant,
+  .pay-row:focus-within .cat-merchant,
+  .tx-table tbody tr:hover .pay-note.empty,
+  .tx-table tbody tr:focus-within .pay-note.empty,
+  .tx-table tbody tr:hover .cat-merchant,
+  .tx-table tbody tr:focus-within .cat-merchant {
+    opacity: 1;
+  }
+
+  .cat-line .cat-actions {
+    opacity: 0;
+    transition: opacity 0.12s;
+  }
+
+  .cat-line:hover .cat-actions,
+  .cat-line:focus-within .cat-actions {
+    opacity: 1;
+  }
+}

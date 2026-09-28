@@ -1,0 +1,137 @@
+/* ---------- Payments panel ---------- */
+
+.pay-panel {
+  position: sticky;
+  top: 1rem;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 420px;
+  max-height: calc(100vh - 2rem);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.pay-panel-head {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.9rem 1rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.pay-head-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.5rem 0.2rem 0.6rem;
+  border: 1px solid var(--accent-soft-2);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.filter-chip:hover {
+  background: var(--accent-soft-2);
+}
+
+.filter-chip .dot {
+  margin: 0;
+}
+
+.pay-rows {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 0.2rem 0 0.4rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+.pay-row {
+  display: grid;
+  grid-template-columns: 3px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.55rem 1rem;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.pay-row:hover {
+  background: var(--surface-2);
+}
+
+.pay-row.uncat {
+  background: #fffbf2;
+}
+
+.pay-row-mark {
+  align-self: stretch;
+  min-height: 2.2rem;
+  border-radius: 3px;
+}
+
+.pay-body {
+  min-width: 0;
+}
+
+.pay-row .who {
+  display: block;
+  overflow: hidden;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pay-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  margin-top: 0.2rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.pay-date {
+  font-variant-numeric: tabular-nums;
+}
+
+.pay-title {
+  max-width: 18ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pay-amount {
+  font-size: 0.875rem;
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.pay-empty {
+  margin: 0;
+  padding: 1rem;
+}

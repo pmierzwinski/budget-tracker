@@ -1,4 +1,5 @@
-import { categoryColor, money, percent } from "../format";
+import { categoryColor } from "../colors";
+import { money, percent } from "../format";
 import type { CategoryBudget } from "../types";
 
 export function CategoryLimits({

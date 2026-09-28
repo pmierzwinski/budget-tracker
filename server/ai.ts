@@ -1,16 +1,21 @@
-import { DEFAULT_CATEGORY, suggestPattern } from "./categorize.ts";
+// OpenAI-compatible /chat/completions (JSON mode): categorizing "Inne" payments and evaluating a view.
+import { DEFAULT_CATEGORY, evaluationKey, merchantPattern } from "../shared/domain.ts";
+import { MONTHS_NOMINATIVE, isCalendarMonth } from "../shared/dates.ts";
+import { round2 } from "../shared/numbers.ts";
+import type { AiCategorizeResult, PeriodEvaluation, Transaction, TxFilters } from "../shared/types.ts";
 import {
   applyCategory,
+  getAccount,
   getSetting,
   getStats,
   listCategories,
   listTransactions,
   listUncategorized,
+  setSetting,
   upsertPeriodEvaluation,
   upsertRule,
-} from "./db.ts";
+} from "./db/index.ts";
 import { serverEnv } from "./runtime.ts";
-import type { PeriodEvaluation, Transaction, TxFilters } from "./types.ts";
 
 type Assignment = { key: string; category: string };
 
@@ -25,8 +30,53 @@ export function hasAiKey(): boolean {
   return Boolean(aiConfig().apiKey);
 }
 
+export function saveAiKey(apiKey: string): void {
+  setSetting("openai_api_key", apiKey.trim());
+}
+
+async function chatJson(system: string, user: string, temperature: number): Promise<unknown> {
+  const { apiKey, baseUrl, model } = aiConfig();
+  if (!apiKey) {
+    throw new Error("Brak klucza OpenAI. Wklej go w Ustawienia → AI albo ustaw OPENAI_API_KEY w pliku .env.");
+  }
+
+  const response = await fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${apiKey}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      temperature,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+    }),
+  });
+
+  const data = (await response.json()) as {
+    error?: { message?: string };
+    choices?: { message?: { content?: string } }[];
+  };
+  if (!response.ok) {
+    throw new Error(data.error?.message || `OpenAI ${response.status}`);
+  }
+
+  const raw = data.choices?.[0]?.message?.content || "{}";
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    throw new Error("AI zwróciło niepoprawną odpowiedź.");
+  }
+}
+
+// ---------- Categorization ----------
+
 function merchantKey(tx: Transaction): string {
-  return suggestPattern(tx.payee || tx.title || tx.type).trim();
+  return merchantPattern(tx).trim();
 }
 
 function groupsFrom(items: Transaction[]): { key: string; sample: Transaction; count: number; ids: string[] }[] {
@@ -49,11 +99,6 @@ async function askModel(
   groups: { key: string; sample: Transaction; count: number }[],
   categories: string[],
 ): Promise<Assignment[]> {
-  const { apiKey, baseUrl, model } = aiConfig();
-  if (!apiKey) {
-    throw new Error("Brak klucza OpenAI. Wklej go w Ustawienia → AI albo ustaw OPENAI_API_KEY w pliku .env.");
-  }
-
   const payload = groups.map((group) => ({
     key: group.key,
     count: group.count,
@@ -62,59 +107,19 @@ async function askModel(
     type: group.sample.type,
     amount: group.sample.amount,
   }));
-
-  const response = await fetch(`${baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${apiKey}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content:
-            "Jesteś asystentem do kategoryzacji wydatków z polskiego konta bankowego. " +
-            "Przypisuj kategorie wyłącznie z podanej listy. Jeśli nie jesteś pewien, użyj „Inne”. " +
-            'Zwróć JSON: {"assignments":[{"key":"...","category":"..."}]}',
-        },
-        {
-          role: "user",
-          content: `Dostępne kategorie:\n${categories.join(", ")}\n\nPłatności (pogrupowane po pośredniku):\n${JSON.stringify(payload)}`,
-        },
-      ],
-    }),
-  });
-
-  const data = (await response.json()) as {
-    error?: { message?: string };
-    choices?: { message?: { content?: string } }[];
-  };
-  if (!response.ok) {
-    throw new Error(data.error?.message || `OpenAI ${response.status}`);
-  }
-
-  const raw = data.choices?.[0]?.message?.content || "{}";
-  let parsed: { assignments?: Assignment[] };
-  try {
-    parsed = JSON.parse(raw) as { assignments?: Assignment[] };
-  } catch {
-    throw new Error("AI zwróciło niepoprawną odpowiedź.");
-  }
+  const parsed = (await chatJson(
+    "Jesteś asystentem do kategoryzacji wydatków z polskiego konta bankowego. " +
+      "Przypisuj kategorie wyłącznie z podanej listy. Jeśli nie jesteś pewien, użyj „Inne”. " +
+      'Zwróć JSON: {"assignments":[{"key":"...","category":"..."}]}',
+    `Dostępne kategorie:\n${categories.join(", ")}\n\nPłatności (pogrupowane po pośredniku):\n${JSON.stringify(payload)}`,
+    0,
+  )) as { assignments?: Assignment[] };
   const allowed = new Set(categories);
-  return (parsed.assignments || []).filter(
-    (row) => row.key && row.category && allowed.has(row.category),
-  );
+  return (parsed.assignments || []).filter((row) => row.key && row.category && allowed.has(row.category));
 }
 
-export async function categorizeWithAi(ids?: string[]): Promise<{
-  updated: number;
-  groups: number;
-  remaining: number;
-}> {
+/** Only payments in "Inne", grouped by payee; results are saved as rules so future imports need no AI. */
+export async function categorizeWithAi(ids?: string[]): Promise<AiCategorizeResult> {
   const items = listUncategorized(ids);
   if (!items.length) {
     return { updated: 0, groups: 0, remaining: 0 };
@@ -149,57 +154,12 @@ export async function categorizeWithAi(ids?: string[]): Promise<{
   };
 }
 
-const PL_MONTHS = [
-  "styczeń",
-  "luty",
-  "marzec",
-  "kwiecień",
-  "maj",
-  "czerwiec",
-  "lipiec",
-  "sierpień",
-  "wrzesień",
-  "październik",
-  "listopad",
-  "grudzień",
-];
-
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
-}
+// ---------- Period evaluation ----------
 
 function monthLabelPl(month: string): string {
   const [year, m] = month.split("-").map(Number);
-  const name = PL_MONTHS[(m || 1) - 1] || month;
+  const name = MONTHS_NOMINATIVE[(m || 1) - 1] || month;
   return `${name.charAt(0).toUpperCase()}${name.slice(1)} ${year}`;
-}
-
-function isCalendarMonth(from: string, to: string): boolean {
-  if (!from || !to || from.slice(0, 7) !== to.slice(0, 7) || from.slice(8) !== "01") return false;
-  const [year, month] = from.split("-").map(Number);
-  const last = new Date(year, month, 0).getDate();
-  return to === `${from.slice(0, 8)}${String(last).padStart(2, "0")}`;
-}
-
-export function evaluationKey(filters: {
-  from?: string;
-  to?: string;
-  category?: string;
-  kind?: string;
-  minAmount?: string;
-  maxAmount?: string;
-  account?: string;
-}): string {
-  const parts = [
-    filters.from || "",
-    filters.to || "",
-    filters.category || "",
-    filters.kind && filters.kind !== "all" ? filters.kind : "",
-    filters.minAmount || "",
-    filters.maxAmount || "",
-  ];
-  if (filters.account) parts.push(filters.account);
-  return parts.join("|");
 }
 
 function viewLabel(filters: { from: string; to: string; category?: string }): string {
@@ -210,65 +170,23 @@ function viewLabel(filters: { from: string; to: string; category?: string }): st
   return label;
 }
 
-async function chatJson(system: string, user: string): Promise<unknown> {
-  const { apiKey, baseUrl, model } = aiConfig();
-  if (!apiKey) {
-    throw new Error("Brak klucza OpenAI. Wklej go w Ustawienia → AI albo ustaw OPENAI_API_KEY w pliku .env.");
-  }
-
-  const response = await fetch(`${baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${apiKey}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0.4,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-    }),
-  });
-
-  const data = (await response.json()) as {
-    error?: { message?: string };
-    choices?: { message?: { content?: string } }[];
-  };
-  if (!response.ok) {
-    throw new Error(data.error?.message || `OpenAI ${response.status}`);
-  }
-
-  const raw = data.choices?.[0]?.message?.content || "{}";
-  try {
-    return JSON.parse(raw) as unknown;
-  } catch {
-    throw new Error("AI zwróciło niepoprawną odpowiedź.");
-  }
-}
-
-export async function evaluateCurrentPeriod(input: {
-  from: string;
-  to: string;
-  category?: string;
-  kind?: TxFilters["kind"];
-  minAmount?: number;
-  maxAmount?: number;
-  minAmountRaw?: string;
-  maxAmountRaw?: string;
-  account?: string;
-  accountName?: string;
-}): Promise<PeriodEvaluation> {
-  const from = input.from.trim();
-  const to = input.to.trim();
+/**
+ * 4–8 sentences in Polish about the current view (period + filters). `typed` holds the amounts exactly as
+ * the user typed them — they are part of the evaluation key the frontend looks up.
+ */
+export async function evaluateCurrentPeriod(
+  view: TxFilters,
+  typed: { minAmount?: string; maxAmount?: string },
+): Promise<PeriodEvaluation> {
+  const from = (view.from || "").trim();
+  const to = (view.to || "").trim();
   if (!from || !to) throw new Error("Podaj zakres dat.");
 
+  const input = { ...view, category: view.category?.trim() || undefined };
   const filters: TxFilters = {
     from,
     to,
-    category: input.category || undefined,
+    category: input.category,
     kind: input.kind,
     minAmount: input.minAmount,
     maxAmount: input.maxAmount,
@@ -331,9 +249,11 @@ export async function evaluateCurrentPeriod(input: {
       "Nie wymyślaj transakcji spoza danych. Kwoty w złotych. " +
       'Zwróć JSON: {"text":"..."}',
     `Oceń ten widok:\n${JSON.stringify(payload)}`,
+    0.4,
   )) as { text?: string };
 
   const text = String(parsed.text || "").trim();
+  const accountName = input.account ? getAccount(input.account)?.name : undefined;
   if (!text) throw new Error("AI nie zwróciło oceny.");
 
   return upsertPeriodEvaluation({
@@ -342,13 +262,13 @@ export async function evaluateCurrentPeriod(input: {
       to,
       category: input.category,
       kind: input.kind,
-      minAmount: input.minAmountRaw,
-      maxAmount: input.maxAmountRaw,
+      minAmount: typed.minAmount,
+      maxAmount: typed.maxAmount,
       account: input.account,
     }),
     from,
     to,
-    label: `${viewLabel({ from, to, category: input.category })}${input.accountName ? ` · ${input.accountName}` : ""}`,
+    label: `${viewLabel({ from, to, category: input.category })}${accountName ? ` · ${accountName}` : ""}`,
     text,
     createdAt: new Date().toISOString(),
   });

@@ -1,60 +1,37 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { api } from "../../api";
+import { useApp } from "../../app/AppContext";
 import { Icon } from "../../components/Icon";
+import { Notices } from "../../components/ui/Notices";
 import { plural } from "../../format";
+import { useAction } from "../../hooks/useAction";
+import { aiCategorizedMessage } from "../../messages";
 
 export function AiTab() {
+  const { meta, refreshMeta } = useApp();
+  const { hasAiKey, uncategorized } = meta;
   const [aiKey, setAiKey] = useState("");
-  const [hasAiKey, setHasAiKey] = useState(false);
-  const [uncategorized, setUncategorized] = useState(0);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+  const { busy, message, error, setMessage, run } = useAction();
 
-  async function load() {
-    const meta = await api.meta();
-    setHasAiKey(Boolean(meta.hasAiKey));
-    setUncategorized(meta.uncategorized || 0);
-  }
-
-  useEffect(() => {
-    load().catch((err: Error) => setError(err.message));
-  }, []);
-
-  async function saveKey() {
-    setError("");
-    try {
-      const result = await api.saveAiKey(aiKey.trim());
-      setHasAiKey(result.hasAiKey);
+  function saveKey() {
+    return run(async () => {
+      await api.saveAiKey(aiKey.trim());
       setAiKey("");
       setMessage("Zapisano klucz OpenAI. Przyciski AI działają już na wszystkich ekranach.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Nie zapisano klucza");
-    }
+      await refreshMeta();
+    }, "Nie zapisano klucza");
   }
 
-  async function categorize() {
-    setBusy(true);
-    setError("");
-    try {
-      const result = await api.categorizeAi();
-      setMessage(
-        result.updated
-          ? `AI ustawiło kategorię dla ${result.updated} płatności (${result.groups} pośredników). Zostało ${result.remaining} jako Inne.`
-          : "AI nie zmieniło kategorii — nic nie pasowało do istniejących kategorii.",
-      );
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Kategoryzacja AI nie powiodła się");
-    } finally {
-      setBusy(false);
-    }
+  function categorize() {
+    return run(async () => {
+      setMessage(aiCategorizedMessage(await api.categorizeAi()));
+      await refreshMeta();
+    }, "Kategoryzacja AI nie powiodła się");
   }
 
   return (
     <>
-      {message ? <p className="banner ok">{message}</p> : null}
-      {error ? <p className="banner error">{error}</p> : null}
+      <Notices message={message} error={error} />
 
       <div className="split">
         <article className="card">
@@ -105,7 +82,7 @@ export function AiTab() {
           </div>
           <ul className="feature-list">
             <li>
-              <strong>Kategoryzacja</strong> — płatności z Inne, pogrupowane po pośredniku, trafiają do OpenAI razem z
+              <strong>Kategoryzacja</strong> — płatności z Inne, pogrupowane po odbiorcy, trafiają do OpenAI razem z
               listą kategorii. Wynik zapisuje się jako reguły, więc kolejne importy łapią się już bez AI.
             </li>
             <li>

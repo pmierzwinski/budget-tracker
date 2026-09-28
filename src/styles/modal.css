@@ -1,0 +1,130 @@
+/* ---------- Modal ---------- */
+
+.modal {
+  width: min(460px, calc(100vw - 2rem));
+  max-height: calc(100vh - 3rem);
+  padding: 0;
+  border: 0;
+  border-radius: 18px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-lg);
+}
+
+.modal::backdrop {
+  background: rgba(16, 24, 40, 0.4);
+  backdrop-filter: blur(2px);
+}
+
+.modal[open] {
+  animation: modal-in 0.16s ease-out;
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}
+
+.modal-body {
+  display: grid;
+  gap: 1.1rem;
+  padding: 1.25rem 1.4rem 1.2rem;
+}
+
+.modal-body > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.modal-body > header h2 {
+  font-size: 1.2rem;
+}
+
+.modal-content {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.modal-content .banner {
+  margin: 0;
+}
+
+.modal-body > footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--line-soft);
+}
+
+.field input,
+.field select {
+  width: 100%;
+}
+
+.field-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.field-hint.warn {
+  color: var(--warn);
+  font-weight: 500;
+}
+
+.name-preview {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.name-preview input {
+  flex: 1 1 auto;
+}
+
+.swatch.lg {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+}
+
+.scope-choice {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.scope-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.scope-option:hover {
+  border-color: var(--line-strong);
+}
+
+.scope-option.active {
+  border-color: var(--accent-soft-2);
+  background: var(--accent-soft);
+}
+
+.scope-option input {
+  margin-top: 0.2rem;
+  accent-color: var(--accent);
+}
+
+.scope-option small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.78rem;
+}

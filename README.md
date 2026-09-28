@@ -1,11 +1,11 @@
 # Wydatki
 
-Lokalna aplikacja do śledzenia wydatków z historii PKO Banku Polskiego.
+Lokalna aplikacja do analizy wydatków z kont w polskich bankach (PKO BP, mBank, ING, Santander, Pekao, Millennium, Alior, Revolut, Credit Agricole), dla kilku kont naraz.
 
-Bezpośrednie API PSD2 PKO jest dostępne tylko dla licencjonowanych TPP, więc aplikacja nie loguje się do iPKO hasłem. Działa na dwa sposoby:
+Aplikacja nie loguje się do bankowości hasłem. Dane trafiają do niej na dwa sposoby:
 
-1. **Import CSV** z iPKO — działa od razu.
-2. **Open Banking** przez GoCardless Bank Account Data — logujesz się na stronie PKO, aplikacja pobiera historię.
+1. **Import CSV** z bankowości — działa od razu.
+2. **Open Banking** przez Enable Banking (albo GoCardless dla istniejących kont) — logujesz się na stronie banku, aplikacja pobiera historię.
 
 Dane trzymane są lokalnie w `data/wydatki.db`.
 
@@ -18,9 +18,10 @@ npm run dev
 
 Aplikacja: [http://localhost:5173](http://localhost:5173)
 
-## Import z iPKO
+## Import z banku
 
-1. Zaloguj się do iPKO.
-2. Konto → Historia operacji.
-3. Pobierz zestawienie jako CSV.
-4. Wgraj plik w zakładce **Import**.
+1. Zaloguj się do bankowości i otwórz historię rachunku.
+2. Wyeksportuj ją do CSV (instrukcja dla wybranego banku jest w zakładce **Import**).
+3. Wgraj plik w zakładce **Import**.
+
+Szczegóły architektury, reguły domenowe i konwencje: [AGENTS.md](AGENTS.md).

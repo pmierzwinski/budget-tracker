@@ -1,19 +1,19 @@
-import { createHash, randomUUID } from "node:crypto";
-import { categorizeWithUserRules, searchText } from "./categorize.ts";
-import { createAccount, findAccount, getSetting, hiddenCategoryNames, linkAccount, listRules, setSetting } from "./db.ts";
-import { serverEnv } from "./runtime.ts";
-import type { Transaction } from "./types.ts";
+// Open Banking through GoCardless Bank Account Data (new sign-ups are closed; kept for existing users).
+import { randomUUID } from "node:crypto";
+import type { Institution, Transaction } from "../../shared/types.ts";
+import { getJsonSetting, getSetting, setJsonSetting, setSetting, upsertLinkedAccount, userCategorizer } from "../db/index.ts";
+import { serverEnv } from "../runtime.ts";
+import { hashId, newTransaction, utcDay } from "../transaction.ts";
+import type { Categorizer } from "../categorize.ts";
+import { providerFetch, sortInstitutions } from "./http.ts";
 
 const API = "https://bankaccountdata.gocardless.com/api/v2";
-export const PKO_INSTITUTION_ID = "PKO_BPKOPLPW";
-export const SANDBOX_INSTITUTION_ID = "SANDBOXFINANCE_SFIN0000";
+const PKO_INSTITUTION_ID = "PKO_BPKOPLPW";
+const SANDBOX_INSTITUTION_ID = "SANDBOXFINANCE_SFIN0000";
+const TOKEN = "gocardless_token";
+const TOKEN_TTL_MS = 20 * 60 * 60 * 1000;
 
-type TokenPayload = {
-  access: string;
-  refresh: string;
-  access_expires?: number;
-  obtainedAt: number;
-};
+type TokenPayload = { access: string; refresh: string; access_expires?: number; obtainedAt: number };
 
 function secrets() {
   const secretId = getSetting("gocardless_secret_id") || serverEnv("GOCARDLESS_SECRET_ID");
@@ -21,55 +21,38 @@ function secrets() {
   return { secretId, secretKey };
 }
 
-export function hasSecrets(): boolean {
-  const { secretId, secretKey } = secrets();
-  return Boolean(secretId && secretKey);
+export function saveGoCardlessSecrets(secretId: string, secretKey: string): void {
+  const id = secretId.trim();
+  const key = secretKey.trim();
+  if (!id || !key) throw new Error("Podaj Secret ID i Secret Key z portalu GoCardless.");
+  setSetting("gocardless_secret_id", id);
+  setSetting("gocardless_secret_key", key);
+  setSetting(TOKEN, "");
 }
 
-async function gcFetch(path: string, init: RequestInit = {}, token?: string) {
-  const headers: Record<string, string> = {
-    accept: "application/json",
-    "content-type": "application/json",
-    ...(init.headers as Record<string, string> | undefined),
-  };
-  if (token) headers.Authorization = `Bearer ${token}`;
-  const response = await fetch(`${API}${path}`, { ...init, headers });
-  const text = await response.text();
-  let data: unknown = null;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    data = { raw: text };
-  }
-  if (!response.ok) {
-    const detail =
-      typeof data === "object" && data && "detail" in data
-        ? String((data as { detail: string }).detail)
-        : text.slice(0, 300);
-    throw new Error(`GoCardless ${response.status}: ${detail}`);
-  }
-  return data;
+function gcFetch(path: string, init: RequestInit = {}, token?: string): Promise<unknown> {
+  const headers = { ...(init.headers as Record<string, string>), ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+  return providerFetch("GoCardless", `${API}${path}`, { ...init, headers }, (body) =>
+    body && "detail" in body ? String(body.detail) : "",
+  );
+}
+
+function saveToken(access: string, refresh: string): string {
+  setJsonSetting(TOKEN, { access, refresh, obtainedAt: Date.now() } satisfies TokenPayload);
+  return access;
 }
 
 async function getToken(): Promise<string> {
-  const cachedRaw = getSetting("gocardless_token");
-  if (cachedRaw) {
+  const cached = getJsonSetting<TokenPayload | null>(TOKEN, null);
+  if (cached) {
     try {
-      const cached = JSON.parse(cachedRaw) as TokenPayload;
-      const age = Date.now() - cached.obtainedAt;
-      if (cached.access && age < 20 * 60 * 60 * 1000) return cached.access;
+      if (cached.access && Date.now() - cached.obtainedAt < TOKEN_TTL_MS) return cached.access;
       if (cached.refresh) {
         const refreshed = (await gcFetch("/token/refresh/", {
           method: "POST",
           body: JSON.stringify({ refresh: cached.refresh }),
         })) as TokenPayload;
-        const payload: TokenPayload = {
-          access: refreshed.access,
-          refresh: refreshed.refresh || cached.refresh,
-          obtainedAt: Date.now(),
-        };
-        setSetting("gocardless_token", JSON.stringify(payload));
-        return payload.access;
+        return saveToken(refreshed.access, refreshed.refresh || cached.refresh);
       }
     } catch {
       // fetch a fresh token
@@ -84,23 +67,13 @@ async function getToken(): Promise<string> {
     method: "POST",
     body: JSON.stringify({ secret_id: secretId, secret_key: secretKey }),
   })) as TokenPayload;
-  setSetting(
-    "gocardless_token",
-    JSON.stringify({
-      access: token.access,
-      refresh: token.refresh,
-      obtainedAt: Date.now(),
-    }),
-  );
-  return token.access;
+  return saveToken(token.access, token.refresh);
 }
 
-export async function listInstitutions(): Promise<{ id: string; name: string; logo: string }[]> {
+export async function listInstitutions(): Promise<Institution[]> {
   const token = await getToken();
   const rows = (await gcFetch("/institutions/?country=pl", {}, token)) as { id: string; name: string; logo?: string }[];
-  return rows
-    .map((row) => ({ id: row.id, name: row.name, logo: row.logo || "" }))
-    .sort((a, b) => a.name.localeCompare(b.name, "pl"));
+  return sortInstitutions(rows.map((row) => ({ id: row.id, name: row.name, logo: row.logo || "" })));
 }
 
 export async function startConnection(options: {
@@ -158,39 +131,26 @@ type GcTransaction = {
   additionalInformation?: string;
 };
 
-function mapGcTx(raw: GcTransaction, iban: string, accountId: string): Transaction {
+function mapGcTx(raw: GcTransaction, iban: string, accountId: string, categorize: Categorizer): Transaction {
   const amount = Number(raw.transactionAmount?.amount || 0);
   const payee = raw.creditorName || raw.debtorName || "";
   const title = raw.remittanceInformationUnstructured || "";
-  const description = [raw.additionalInformation, raw.remittanceInformationUnstructured]
-    .filter(Boolean)
-    .join("\n");
-  const bookingDate = raw.bookingDate || raw.valueDate || new Date().toISOString().slice(0, 10);
-  const date = raw.valueDate || bookingDate;
-  const external =
-    raw.transactionId ||
-    raw.internalTransactionId ||
-    createHash("sha256").update(`${bookingDate}|${amount}|${payee}|${title}`).digest("hex").slice(0, 24);
-  const draft = { payee, title, description, type: "Open Banking" };
-  return {
-    id: createHash("sha256").update(`gc|${external}`).digest("hex").slice(0, 24),
-    date,
+  const description = [raw.additionalInformation, raw.remittanceInformationUnstructured].filter(Boolean).join("\n");
+  const bookingDate = raw.bookingDate || raw.valueDate || utcDay();
+  const external = raw.transactionId || raw.internalTransactionId || hashId([bookingDate, amount, payee, title]);
+  const draft = { payee, title, description, type: "Open Banking", amount };
+  return newTransaction({
+    ...draft,
+    id: hashId(["gc", external]),
+    date: raw.valueDate || bookingDate,
     bookingDate,
-    amount,
-    currency: raw.transactionAmount?.currency || "PLN",
-    type: "Open Banking",
-    payee,
-    title,
-    description,
+    currency: raw.transactionAmount?.currency,
     accountIban: iban,
     accountId,
-    category: categorizeWithUserRules(searchText(draft), amount, listRules(), hiddenCategoryNames()),
-    comment: "",
-    excluded: false,
+    category: categorize(draft),
     source: "gocardless",
     externalId: `gc:${external}`,
-    createdAt: new Date().toISOString(),
-  };
+  });
 }
 
 export async function syncAccounts(): Promise<{ imported: Transaction[]; accounts: number }> {
@@ -209,33 +169,28 @@ export async function syncAccounts(): Promise<{ imported: Transaction[]; account
     );
   }
 
+  const categorize = userCategorizer();
+  const bank = getSetting("gocardless_institution_name") || "PKO BP";
   const imported: Transaction[] = [];
   for (const accountId of requisition.accounts) {
     const details = (await gcFetch(`/accounts/${accountId}/details/`, {}, token)) as {
       account?: { iban?: string; name?: string; currency?: string; ownerName?: string };
     };
     const iban = details.account?.iban || "";
-    const bank = getSetting("gocardless_institution_name") || "PKO BP";
-    const local =
-      findAccount({ provider: "gocardless", externalId: accountId, iban }) ||
-      createAccount({
-        name: `${bank}${details.account?.name ? ` · ${details.account.name}` : ""}${iban ? ` ··${iban.slice(-4)}` : ""}`,
-        bank,
-        iban,
-      });
-    linkAccount(local.id, { provider: "gocardless", externalId: accountId, iban });
+    const local = upsertLinkedAccount("gocardless", accountId, { bank, iban, label: details.account?.name });
     const payload = (await gcFetch(`/accounts/${accountId}/transactions/`, {}, token)) as {
       transactions?: { booked?: GcTransaction[]; pending?: GcTransaction[] };
     };
     const booked = payload.transactions?.booked || [];
-    imported.push(...booked.map((item) => mapGcTx(item, iban, local.id)));
+    imported.push(...booked.map((item) => mapGcTx(item, iban, local.id, categorize)));
   }
   return { imported, accounts: requisition.accounts.length };
 }
 
 export function connectionStatus() {
+  const { secretId, secretKey } = secrets();
   return {
-    hasSecrets: hasSecrets(),
+    hasSecrets: Boolean(secretId && secretKey),
     requisitionId: getSetting("gocardless_requisition_id") || null,
     institutionId: getSetting("gocardless_institution_id") || null,
     institutionName: getSetting("gocardless_institution_name") || null,

@@ -1,0 +1,99 @@
+/* ---------- Limits page ---------- */
+
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.kpi {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.kpi > span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.kpi strong {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi em {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+.limit-row.static {
+  cursor: default;
+}
+
+.limit-row.static:hover {
+  border-color: var(--line);
+}
+
+.limit-table {
+  display: grid;
+}
+
+.limit-table-head,
+.limit-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 8rem 9rem minmax(10rem, 14rem);
+  align-items: center;
+  gap: 1rem;
+  padding: 0.4rem 0.5rem;
+}
+
+.limit-table-head {
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.limit-line {
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.limit-line:last-child {
+  border-bottom: 0;
+}
+
+.limit-line:hover {
+  background: var(--surface-2);
+}
+
+.limit-line:not(.has-limit) .cat-line-name {
+  color: var(--ink-2);
+  font-weight: 400;
+}
+
+.limit-usage {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.limit-usage .limit-track {
+  flex: 1 1 auto;
+}
+
+.limit-usage .limit-pct {
+  min-width: 3.2rem;
+  font-size: 0.82rem;
+  text-align: right;
+}
+
+.limit-none {
+  font-size: 0.8rem;
+}

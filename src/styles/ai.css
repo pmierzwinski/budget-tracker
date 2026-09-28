@@ -1,0 +1,150 @@
+/* ---------- AI ---------- */
+
+.ai {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.ai-panel {
+  padding: 0.75rem 0.85rem;
+  border: 1px solid #e7e0fb;
+  border-radius: 12px;
+  background: var(--ai-soft);
+}
+
+.ai p {
+  margin: 0;
+}
+
+.ai .banner {
+  margin-top: 0.25rem;
+}
+
+.ai-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.ai-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--ai);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ai-date {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.ai-preview {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--ink-2);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+.ai-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.9rem;
+}
+
+.ai-ask {
+  justify-self: start;
+}
+
+.ai-busy {
+  font-size: 0.85rem;
+}
+
+.ai-off p {
+  font-size: 0.82rem;
+}
+
+.ai-strip {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem 1.25rem;
+  padding: 0.8rem 1.1rem;
+  border: 1px solid #e7e0fb;
+  border-radius: var(--radius);
+  background: var(--ai-soft);
+}
+
+.ai-strip .ai-head {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+}
+
+.ai-strip .ai-preview {
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.ai-strip .banner {
+  grid-column: 1 / -1;
+}
+
+.ai-dialog {
+  width: min(680px, calc(100vw - 2rem));
+  max-height: calc(100vh - 3rem);
+  padding: 0;
+  border: 0;
+  border-radius: 18px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-lg);
+}
+
+.ai-dialog::backdrop {
+  background: rgba(16, 24, 40, 0.4);
+  backdrop-filter: blur(2px);
+}
+
+.ai-dialog-body {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem 1.4rem 1.2rem;
+}
+
+.ai-dialog-body header,
+.ai-dialog-body footer {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.ai-dialog-body footer {
+  align-items: center;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--line-soft);
+  font-size: 0.8rem;
+}
+
+.ai-dialog-body h2 {
+  margin-top: 0.3rem;
+  font-size: 1.2rem;
+}
+
+.ai-text {
+  max-height: 60vh;
+  margin: 0;
+  overflow: auto;
+  color: var(--ink-2);
+  line-height: 1.65;
+  white-space: pre-wrap;
+}

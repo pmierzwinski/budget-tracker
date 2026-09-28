@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { DEFAULT_AMOUNT_THRESHOLDS as DEFAULT_THRESHOLDS, MAX_AMOUNT_THRESHOLDS as MAX_THRESHOLDS } from "../../../shared/domain.ts";
 import { api } from "../../api";
+import { useApp } from "../../app/AppContext";
 import { Icon } from "../../components/Icon";
-
-const DEFAULT_THRESHOLDS = [100, 200, 300, 500];
-const MAX_THRESHOLDS = 9;
+import { Notices } from "../../components/ui/Notices";
+import { useAction } from "../../hooks/useAction";
 
 function toNumbers(drafts: string[]): number[] {
   return drafts
@@ -25,45 +26,27 @@ function bucketLabels(thresholds: number[]): string[] {
 }
 
 export function ChartsTab() {
-  const [saved, setSaved] = useState<number[]>([]);
-  const [drafts, setDrafts] = useState<string[]>([]);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    api
-      .amountThresholds()
-      .then((data) => {
-        setSaved(data.thresholds);
-        setDrafts(data.thresholds.map(String));
-      })
-      .catch((err: Error) => setError(err.message));
-  }, []);
+  const { meta, refreshMeta } = useApp();
+  const saved = meta.amountThresholds;
+  const [drafts, setDrafts] = useState<string[]>(() => saved.map(String));
+  const { busy, message, error, setMessage, run } = useAction();
 
   const preview = normalize(toNumbers(drafts));
   const invalid = drafts.some((value) => value.trim() && !toNumbers([value]).length);
   const dirty = preview.join(",") !== saved.join(",");
 
-  async function save(values: number[]) {
-    setBusy(true);
-    setError("");
-    try {
+  function save(values: number[]) {
+    return run(async () => {
       const result = await api.saveAmountThresholds(values);
-      setSaved(result.thresholds);
       setDrafts(result.thresholds.map(String));
       setMessage("Zapisano przedziały — wykres „Wielkość płatności” na Przeglądzie już ich używa.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Nie zapisano przedziałów");
-    } finally {
-      setBusy(false);
-    }
+      await refreshMeta();
+    }, "Nie zapisano przedziałów");
   }
 
   return (
     <>
-      {message ? <p className="banner ok">{message}</p> : null}
-      {error ? <p className="banner error">{error}</p> : null}
+      <Notices message={message} error={error} />
 
       <div className="split">
         <article className="card">
