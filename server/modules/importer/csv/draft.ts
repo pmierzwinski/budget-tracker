@@ -1,6 +1,6 @@
-import type { Transaction } from "../../shared/types.ts";
-import type { Categorizer } from "../categorize.ts";
-import { hashId, newTransaction } from "../transaction.ts";
+import type { Transaction } from "../../../../shared/types.ts";
+import type { Categorizer } from "../../categories/categorizer.ts";
+import { hashId, newTransaction } from "../../transactions/model.ts";
 import type { BankId } from "./banks.ts";
 
 export type DraftRow = {

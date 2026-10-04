@@ -91,6 +91,7 @@
 .cat-actions {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: nowrap;
   gap: 0.3rem;
 }
 

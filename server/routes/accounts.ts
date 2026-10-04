@@ -2,8 +2,8 @@
 import { Router } from "express";
 import multer from "multer";
 import type { ImportResult } from "../../shared/types.ts";
-import { categorizeWithAi } from "../ai.ts";
-import { bankName, parseBankCsv } from "../csv/index.ts";
+import { categorizeWithAi } from "../modules/ai/ai.ts";
+import { bankName, parseBankCsv } from "../modules/importer/csv/index.ts";
 import {
   clearAll,
   clearTransactions,
@@ -20,9 +20,9 @@ import {
   updateAccount,
   userCategorizer,
 } from "../db/index.ts";
-import { resetDemoAccount } from "../demo.ts";
+import { resetDemoAccount } from "../modules/importer/demo.ts";
+import { route, text } from "../platform/http.ts";
 import { reenterSession } from "../sessions.ts";
-import { route, text } from "./http.ts";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 

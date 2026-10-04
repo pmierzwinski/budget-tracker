@@ -8,7 +8,7 @@ export const NAV_GROUPS = [
       { id: "dashboard", label: "Przegląd", icon: "dashboard" },
       { id: "stats", label: "Statystyki", icon: "trends" },
       { id: "transactions", label: "Płatności", icon: "list" },
-      { id: "limits", label: "Limity", icon: "gauge" },
+      { id: "limits", label: "Kategorie", icon: "tag" },
     ],
   },
   {
@@ -22,7 +22,7 @@ export const NAV_GROUPS = [
 
 export type Page = (typeof NAV_GROUPS)[number]["links"][number]["id"];
 
-export type SettingsTab = "categories" | "ai" | "accounts" | "bank" | "charts";
+export type SettingsTab = "ai" | "accounts" | "bank" | "charts" | "app";
 
 export type Navigate = (page: Page, tab?: SettingsTab) => void;
 

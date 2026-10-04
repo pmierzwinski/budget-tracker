@@ -2,6 +2,7 @@
 import type {
   Account,
   AiCategorizeResult,
+  AiPublic,
   BankStatus,
   CategoryLimitSetting,
   CategoryRule,
@@ -61,10 +62,14 @@ export const api = {
     request<Ok>("/api/recurring", json("PUT", { key, status })),
   transactions: (params: TxQuery) =>
     request<TransactionsResult>(`/api/transactions?${query(params)}`),
-  updateCategory: (id: string, category: string, options?: { onlyThis?: boolean }) =>
-    request<Ok & { updated: number; pattern: string }>(
+  updateCategory: (id: string, category: string, options?: { onlyThis?: boolean; force?: boolean }) =>
+    request<Ok & { updated: number; skippedManual: number; pattern: string }>(
       `/api/transactions/${id}`,
-      json("PATCH", { category, onlyThis: options?.onlyThis !== false }),
+      json("PATCH", {
+        category,
+        onlyThis: options?.onlyThis !== false,
+        force: options?.force === true,
+      }),
     ),
   updateComment: (id: string, comment: string) =>
     request<Ok & { comment: string }>(`/api/transactions/${id}`, json("PATCH", { comment })),
@@ -108,7 +113,10 @@ export const api = {
   importDemo: (options: { uncategorized?: boolean } = {}) =>
     request<DemoResult>("/api/import/demo", json("POST", options)),
   clear: (all = false) => request<Ok>(`/api/data${all ? "?all=1" : ""}`, { method: "DELETE" }),
-  saveAiKey: (apiKey: string) => request<Ok & { hasAiKey: boolean }>("/api/ai/key", json("POST", { apiKey })),
+  saveAiKey: (settings: { apiKey?: string; provider: string; model?: string; baseUrl?: string }) =>
+    request<Ok & { hasAiKey: boolean; ai: AiPublic }>("/api/ai/key", json("POST", settings)),
+  listAiModels: (settings: { provider: string; apiKey?: string; baseUrl?: string }) =>
+    request<{ models: { id: string; name: string }[]; selected: string }>("/api/ai/models", json("POST", settings)),
   categorizeAi: (ids?: string[]) =>
     request<AiCategorizeResult>("/api/ai/categorize", json("POST", { ids })),
   evaluations: () => request<{ evaluations: PeriodEvaluation[]; hasAiKey: boolean }>("/api/ai/evaluations"),

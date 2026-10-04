@@ -46,7 +46,7 @@
 .limit-table-head,
 .limit-line {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 8rem 9rem minmax(10rem, 14rem);
+  grid-template-columns: minmax(0, 1fr) 8rem 9rem minmax(10rem, 14rem) 12.5rem;
   align-items: center;
   gap: 1rem;
   padding: 0.4rem 0.5rem;

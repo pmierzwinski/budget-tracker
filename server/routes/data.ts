@@ -1,8 +1,8 @@
 // Meta, transactions, stats and insights.
 import { Router } from "express";
 import type { Meta, TransactionsResult } from "../../shared/types.ts";
-import { hasAiKey } from "../ai.ts";
-import { BANKS } from "../csv/index.ts";
+import { aiPublic, hasAiKey } from "../modules/ai/ai.ts";
+import { BANKS } from "../modules/importer/csv/index.ts";
 import {
   amountThresholds,
   applyCategory,
@@ -21,7 +21,7 @@ import {
   updateComment,
 } from "../db/index.ts";
 import { downloadUrl, hosted, packaged } from "../runtime.ts";
-import { readAccount, readFilters, route, text } from "./http.ts";
+import { readAccount, readFilters, route, text } from "../platform/http.ts";
 
 export const dataRoutes = Router();
 
@@ -38,6 +38,7 @@ dataRoutes.get(
       limits: listCategoryLimits(),
       rules: listRules(),
       hasAiKey: hasAiKey(),
+      ai: aiPublic(),
       accounts: listAccounts(),
       banks: [...BANKS],
       amountThresholds: amountThresholds(),
@@ -73,7 +74,15 @@ dataRoutes.patch(
     const comment = hasComment ? updateComment(id, String(body.comment ?? "")) : undefined;
     if (hasExcluded) setExcluded(id, body.excluded);
     if (!category) return { ok: true, comment, excluded: hasExcluded ? body.excluded : undefined };
-    return { ok: true, comment, ...applyCategory(id, category, { onlyThis: body.onlyThis !== false }) };
+    return {
+      ok: true,
+      comment,
+      ...applyCategory(id, category, {
+        onlyThis: body.onlyThis !== false,
+        force: body.force === true,
+        manual: body.manual !== false,
+      }),
+    };
   }),
 );
 

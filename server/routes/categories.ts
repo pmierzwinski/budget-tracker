@@ -15,7 +15,7 @@ import {
   setRecurringStatus,
   upsertRule,
 } from "../db/index.ts";
-import { route, text } from "./http.ts";
+import { route, text } from "../platform/http.ts";
 
 export const categoryRoutes = Router();
 

@@ -10,6 +10,13 @@ import { Transactions } from "../pages/Transactions";
 import type { Meta } from "../types";
 import { AppContext, type AppState } from "./AppContext";
 import { followsAccount, readBankCallback, type Navigate, type Page, type SettingsTab } from "./navigation";
+import {
+  loadNotifications,
+  makeNotification,
+  saveNotifications,
+  type AppNotification,
+  type NotificationDraft,
+} from "./notifications";
 
 const ACCOUNT_KEY = "wydatki.account";
 
@@ -33,6 +40,8 @@ export function App() {
   const [dataVersion, setDataVersion] = useState(0);
   const [loaded, setLoaded] = useState<{ viewKey: string; meta: Meta } | null>(null);
   const [error, setError] = useState("");
+  const [notifications, setNotifications] = useState(loadNotifications);
+  const [txQuery, setTxQuery] = useState("");
 
   const viewKey = followsAccount(page) ? `${page}|${account}|${dataVersion}` : page;
 
@@ -63,15 +72,45 @@ export function App() {
   // Every page (and account switch) starts from fresh /meta; the page mounts once it has arrived.
   useEffect(() => {
     fetchMeta(viewKey).catch((err: Error) => setError(err.message));
-  }, [viewKey, account]);
+  }, [viewKey, fetchMeta]);
 
   const navigate: Navigate = useCallback(
     (next, tab) => {
       if (tab) setSettingsTab(tab);
-      else if (next === "settings" && page !== "settings") setSettingsTab("categories");
+      else if (next === "settings" && page !== "settings") setSettingsTab("ai");
       setPage(next);
     },
     [page],
+  );
+
+  const notify = useCallback((draft: NotificationDraft) => {
+    setNotifications((current) => {
+      const next = [makeNotification(draft), ...current].slice(0, 20);
+      saveNotifications(next);
+      return next;
+    });
+  }, []);
+
+  const markRead = useCallback((id: string) => {
+    setNotifications((current) => {
+      const next = current.map((item) => (item.id === id ? { ...item, read: true } : item));
+      saveNotifications(next);
+      return next;
+    });
+  }, []);
+
+  const clearNotifications = useCallback(() => {
+    setNotifications([]);
+    saveNotifications([]);
+  }, []);
+
+  const openNotification = useCallback(
+    (item: AppNotification) => {
+      markRead(item.id);
+      if (item.page) navigate(item.page);
+      if (item.q) setTxQuery(item.q);
+    },
+    [markRead, navigate],
   );
 
   const state = useMemo<AppState | null>(
@@ -86,11 +125,31 @@ export function App() {
           setDataVersion((value) => value + 1);
         },
         navigate,
+        notifications,
+        notify,
+        markRead,
+        clearNotifications,
+        openNotification,
+        txQuery,
+        clearTxQuery: () => setTxQuery(""),
       },
-    [loaded, fetchMeta, viewKey, account, chooseAccount, navigate],
+    [
+      loaded,
+      fetchMeta,
+      viewKey,
+      account,
+      chooseAccount,
+      navigate,
+      notifications,
+      notify,
+      markRead,
+      clearNotifications,
+      openNotification,
+      txQuery,
+    ],
   );
 
-  if (!state) return error ? <p className="banner error">{error}</p> : null;
+  if (!state) return <p className={error ? "banner error" : "muted loading"}>{error || "Ładowanie…"}</p>;
 
   return (
     <AppContext.Provider value={state}>
@@ -111,7 +170,9 @@ export function App() {
               />
             )}
           </div>
-        ) : null}
+        ) : (
+          <p className="muted loading">Ładowanie…</p>
+        )}
       </Layout>
     </AppContext.Provider>
   );

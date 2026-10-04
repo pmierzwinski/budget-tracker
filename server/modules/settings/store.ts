@@ -1,6 +1,6 @@
-import { DEFAULT_AMOUNT_THRESHOLDS, MAX_AMOUNT_THRESHOLDS } from "../../shared/domain.ts";
-import { round2 } from "../../shared/numbers.ts";
-import { db } from "./core.ts";
+import { DEFAULT_AMOUNT_THRESHOLDS, MAX_AMOUNT_THRESHOLDS } from "../../../shared/domain.ts";
+import { round2 } from "../../../shared/numbers.ts";
+import { db } from "../../platform/db.ts";
 
 export function getSetting(key: string): string {
   const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as { value: string } | undefined;
@@ -36,6 +36,28 @@ export function amountThresholds(): number[] {
     .map((part) => Number(part))
     .filter((value) => Number.isFinite(value) && value > 0);
   return values.length ? [...new Set(values)].sort((a, b) => a - b) : DEFAULT_AMOUNT_THRESHOLDS;
+}
+
+const KEEP_SETTINGS = new Set([
+  "openai_api_key",
+  "ai_api_key",
+  "ai_provider",
+  "ai_model",
+  "ai_base_url",
+  "gocardless_secret_id",
+  "gocardless_secret_key",
+  "enablebanking_app_id",
+  "enablebanking_private_key",
+]);
+
+/** Drops user settings; keeps migration flags and pasted API keys. */
+export function resetUserSettings(): void {
+  const rows = db.prepare("SELECT key FROM settings").all() as { key: string }[];
+  const remove = db.prepare("DELETE FROM settings WHERE key = ?");
+  for (const row of rows) {
+    if (row.key.startsWith("migration.") || KEEP_SETTINGS.has(row.key)) continue;
+    remove.run(row.key);
+  }
 }
 
 export function setAmountThresholds(values: number[]): number[] {

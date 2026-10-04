@@ -1,12 +1,12 @@
 // Tables and hand-written migrations, run on every opened database.
 // A new column = a new block in migrateColumns; a data migration = a function guarded by a settings flag.
 import { randomUUID } from "node:crypto";
-import { DEFAULT_CATEGORY } from "../../shared/domain.ts";
-import { LEGACY_SKIP_CATEGORY, categorizer } from "../categorize.ts";
-import { hiddenCategoryNames } from "./categories.ts";
-import { db, registerSchema, transaction, type Row } from "./core.ts";
-import { listRules } from "./rules.ts";
-import { rowToTx } from "./rows.ts";
+import { DEFAULT_CATEGORY } from "../shared/domain.ts";
+import { hiddenCategoryNames } from "./modules/categories/categories.ts";
+import { LEGACY_SKIP_CATEGORY, categorizer } from "./modules/categories/categorizer.ts";
+import { listRules } from "./modules/categories/rules.ts";
+import { rowToTx } from "./db/rows.ts";
+import { db, registerSchema, transaction, type Row } from "./platform/db.ts";
 
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS transactions (
@@ -90,6 +90,7 @@ function migrateColumns(): void {
   if (!has("comment")) db.exec("ALTER TABLE transactions ADD COLUMN comment TEXT NOT NULL DEFAULT ''");
   if (!has("excluded")) db.exec("ALTER TABLE transactions ADD COLUMN excluded INTEGER NOT NULL DEFAULT 0");
   if (!has("account_id")) db.exec("ALTER TABLE transactions ADD COLUMN account_id TEXT NOT NULL DEFAULT ''");
+  if (!has("manual_category")) db.exec("ALTER TABLE transactions ADD COLUMN manual_category INTEGER NOT NULL DEFAULT 0");
   db.exec("CREATE INDEX IF NOT EXISTS idx_tx_account ON transactions(account_id)");
 }
 

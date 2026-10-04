@@ -1,14 +1,13 @@
-// The database layer. Import from here (not from the files directly) — this also registers the schema.
-// Layers, lowest first: core → settings → categories → rules → accounts / transactions → limits → stats, insights.
-import "./schema.ts";
+// Compatibility barrel after the module move. Import from here so the schema is registered.
+import "../schema.ts";
 
-export { openDatabase, withDatabase } from "./core.ts";
-export * from "./settings.ts";
-export * from "./categories.ts";
-export * from "./rules.ts";
-export * from "./accounts.ts";
-export * from "./transactions.ts";
-export * from "./limits.ts";
-export * from "./stats.ts";
-export * from "./insights.ts";
-export * from "./evaluations.ts";
+export { openDatabase, withDatabase } from "../platform/db.ts";
+export * from "../modules/settings/store.ts";
+export * from "../modules/categories/categories.ts";
+export * from "../modules/categories/rules.ts";
+export * from "../modules/accounts/accounts.ts";
+export * from "../modules/transactions/repository.ts";
+export * from "../modules/categories/limits.ts";
+export * from "../modules/statistics/stats.ts";
+export * from "../modules/statistics/insights.ts";
+export * from "../modules/ai/evaluations.ts";

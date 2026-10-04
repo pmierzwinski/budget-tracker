@@ -1,6 +1,6 @@
 // Built-in regex rules and categorization with user rules on top.
-import { DEFAULT_CATEGORY, type BuiltinCategory } from "../shared/domain.ts";
-import type { CategoryRule } from "../shared/types.ts";
+import { DEFAULT_CATEGORY, type BuiltinCategory } from "../../../shared/domain.ts";
+import type { CategoryRule } from "../../../shared/types.ts";
 
 export const LEGACY_SKIP_CATEGORY = "Poza statystykami";
 

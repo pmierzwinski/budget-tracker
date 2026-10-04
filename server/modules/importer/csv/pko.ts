@@ -1,5 +1,5 @@
 // PKO BP: description details sit in the following, unnamed columns ("Tytuł:", "Lokalizacja: …", "Nazwa odbiorcy:").
-import type { Transaction } from "../../shared/types.ts";
+import type { Transaction } from "../../../../shared/types.ts";
 import { capture, clean, isReferenceTitle, normalizeHeader, parseAmount, parseDate } from "./cells.ts";
 import type { Drafter } from "./draft.ts";
 import { headerIndexOf } from "./profiles.ts";

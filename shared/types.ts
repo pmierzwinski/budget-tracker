@@ -1,4 +1,5 @@
 // Data shapes shared by the server and the frontend (the API contract).
+import type { AiPublic } from "./ai.ts";
 
 export type TransactionSource = "csv" | "gocardless" | "enablebanking" | "demo";
 
@@ -17,6 +18,8 @@ export type Transaction = {
   category: string;
   comment: string;
   excluded: boolean;
+  /** Set when the user picked a category for this payment only; rules skip it unless forced. */
+  manualCategory: boolean;
   source: TransactionSource;
   externalId: string;
   createdAt: string;
@@ -163,6 +166,7 @@ export type Meta = DateBounds & {
   limits: CategoryLimitSetting[];
   rules: CategoryRule[];
   hasAiKey: boolean;
+  ai: AiPublic;
   accounts: Account[];
   banks: Bank[];
   amountThresholds: number[];

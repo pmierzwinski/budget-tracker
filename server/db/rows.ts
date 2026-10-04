@@ -1,7 +1,7 @@
 // Row → object mappers for the tables.
 import { DEFAULT_CATEGORY } from "../../shared/domain.ts";
 import type { Account, PeriodEvaluation, Transaction } from "../../shared/types.ts";
-import type { Row } from "./core.ts";
+import type { Row } from "../platform/db.ts";
 
 export function rowToTx(row: Row): Transaction {
   return {
@@ -19,6 +19,7 @@ export function rowToTx(row: Row): Transaction {
     category: String(row.category || DEFAULT_CATEGORY),
     comment: String(row.comment ?? ""),
     excluded: Number(row.excluded || 0) === 1,
+    manualCategory: Number(row.manual_category || 0) === 1,
     source: (row.source as Transaction["source"]) || "csv",
     externalId: String(row.external_id ?? ""),
     createdAt: String(row.created_at ?? ""),

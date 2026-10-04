@@ -13,6 +13,11 @@
   font-size: 0.86rem;
 }
 
+.settings-head + * .segmented,
+.card .segmented {
+  flex-wrap: wrap;
+}
+
 .cat-limit {
   justify-self: end;
   font-variant-numeric: tabular-nums;

@@ -6,7 +6,7 @@ Lokalna aplikacja (jeden użytkownik, jeden komputer) do analizy wydatków z kon
 
 ```bash
 npm install
-npm run dev      # API :8787 (tsx watch) + Vite :5173, proxy /api → 8787
+npm run dev      # API :8787 (node --watch) + Vite :5173, proxy /api → 8787
 npm run typecheck  # tsc dla server/+shared/ (tsconfig.json) i src/+shared/ (tsconfig.app.json)
 npm run build    # typecheck + vite build → dist/
 npm start        # samo API; jeśli istnieje dist/, serwuje też frontend
@@ -17,13 +17,13 @@ npm run snapshot -- --out <katalog> [--compare <baseline>]  # zrzut odpowiedzi A
 - Node 22+ (używa wbudowanego `node:sqlite`, stąd ostrzeżenie „ExperimentalWarning” w logach — to normalne).
 - Baza: `data/wydatki.db` (w `.gitignore`). Brak testów automatycznych — weryfikuj przez `curl`/`Invoke-RestMethod` na API i w przeglądarce.
 - **Siatka bezpieczeństwa przy refaktorach serwera:** `scripts/api-snapshot.mjs` uruchamia API na kopii bazy (domyślnie `data/wydatki.db`, oryginał nietknięty), zapisuje odpowiedzi ~50 zapytań GET z różnymi filtrami oraz stałą sekwencję zmian (import fixture CSV dwa razy, demo, kategorie, reguły, limity, ukrywanie…), a `--compare` pokazuje różnice. Najpierw zrób baseline przed zmianą, potem porównaj. Id z importu CSV porównuje dosłownie (nie mogą się zmienić). Baseline z konta demo jest ważny tylko tego samego dnia (demo kończy się „dziś”).
-- Serwer da się uruchomić też bez `tsx`: `node server/index.ts` (wbudowane usuwanie typów w Node 22.18+). Dlatego w TS obowiązuje `erasableSyntaxOnly` — bez `enum`, `namespace`, parameter properties.
+- Serwer to zwykły `node server/index.ts` (wbudowane usuwanie typów w Node 22.18+; `dev:server` = `node --watch` tylko na `server/` i `shared/`, żeby zapis bazy nie restartował API). Dlatego w TS obowiązuje `erasableSyntaxOnly` — bez `enum`, `namespace`, parameter properties.
 - Środowisko użytkownika: Windows + PowerShell (`curl` to alias `Invoke-WebRequest`; używaj `curl.exe` albo `Invoke-RestMethod`).
-- `.env` (opcjonalny, ładowany przez `server/runtime.ts` z `appRoot`): `PORT`, `PUBLIC_URL`, `HOSTED`, `HOSTED_MAX_SESSIONS`, `DOWNLOAD_URL`, `GOCARDLESS_SECRET_ID/KEY`, `ENABLEBANKING_APP_ID`, `ENABLEBANKING_KEY_PATH`, `OPENAI_API_KEY`, `OPENAI_MODEL` (domyślnie `gpt-4o-mini`), `OPENAI_BASE_URL`. Klucze wklejone w UI (Ustawienia) trafiają do tabeli `settings` i mają pierwszeństwo przed `.env`.
+- `.env` (opcjonalny, ładowany przez `server/runtime.ts` z `appRoot`): `PORT`, `PUBLIC_URL`, `HOSTED`, `HOSTED_MAX_SESSIONS`, `DOWNLOAD_URL`, `GOCARDLESS_SECRET_ID/KEY`, `ENABLEBANKING_APP_ID`, `ENABLEBANKING_KEY_PATH`, `AI_PROVIDER` (`openai` \| `gemini` \| `anthropic` \| `compatible`), `OPENAI_API_KEY` / `GEMINI_API_KEY` / `ANTHROPIC_API_KEY`, `AI_MODEL` / `OPENAI_MODEL`, `OPENAI_BASE_URL` (też dla `compatible`). Klucze wklejone w UI (Ustawienia) trafiają do tabeli `settings` i mają pierwszeństwo przed `.env`.
 
 ## Stack
 
-- Backend: Express 5 + TypeScript uruchamiany przez `tsx` (importy z rozszerzeniem `.ts`), `node:sqlite`, `multer` (upload), `papaparse` + `iconv-lite` (CSV).
+- Backend: Express 5 + TypeScript (Node 22+ z usuwaniem typów, importy z rozszerzeniem `.ts`), `node:sqlite`, `multer` (upload), `papaparse` + `iconv-lite` (CSV).
 - Frontend: React 19 + Vite, **bez routera, bez biblioteki UI, bez bibliotek wykresów**. Wykresy to ręczny SVG/CSS w `src/components/charts/`. Style: `src/index.css` importuje po kolei pliki z `src/styles/`.
 - Nawigacja: stan `page` w `src/app/App.tsx`; typ `Page` wynika z `NAV_GROUPS` w `src/app/navigation.ts`.
 
@@ -45,7 +45,7 @@ API PSD2 banków jest tylko dla licencjonowanych pośredników (AISP) — bank n
 
 ## Model danych (SQLite)
 
-- `transactions` — `amount` ujemne = wydatek, dodatnie = przychód; `category` (pusta traktowana jak „Inne”), `comment` (max 80 znaków), `excluded` (0/1, „ukryta w statystykach”), `account_id`, `source`: `csv | gocardless | enablebanking | demo`.
+- `transactions` — `amount` ujemne = wydatek, dodatnie = przychód; `category` (pusta traktowana jak „Inne”), `comment` (max 80 znaków), `excluded` (0/1, „ukryta w statystykach”), `manual_category` (0/1, kategoria ustawiona ręcznie na tej płatności — reguły ją omijają, chyba że `force`), `account_id`, `source`: `csv | gocardless | enablebanking | demo`.
 - `accounts` — `id, name, bank, iban, provider ('' | gocardless | enablebanking), external_id`. Każda transakcja należy do konta. Usunięcie konta kasuje jego transakcje. Kategorie, reguły i limity są **wspólne** dla wszystkich kont.
 - `category_rules` — fraza → kategoria (dopasowanie `includes`, bez wielkości liter). Pierwsza pasująca reguła użytkownika wygrywa, potem wbudowane regexy z `server/categorize.ts`.
 - `custom_categories`, `hidden_categories` (usunięte/przemianowane **wbudowane** kategorie — ich trafienia z regexów lądują w „Inne”), `category_limits` (limit miesięczny), `period_evaluations` (zapisane oceny AI, klucz = zakres + filtry + konto), `settings` (klucze, sesje banków, `amount_buckets`).
@@ -53,11 +53,11 @@ API PSD2 banków jest tylko dla licencjonowanych pośredników (AISP) — bank n
 
 ## Reguły domenowe, których łatwo nie zauważyć
 
-- **„Inne”** (`DEFAULT_CATEGORY`) = nieskategoryzowane. Nie da się jej usunąć ani przemianować; zawsze jest ostatnia na liście.
+- **„Inne”** (`DEFAULT_CATEGORY`) = nieskategoryzowane. Nie da się jej usunąć ani przemianować; zawsze jest ostatnia na liście. Pozostałe kategorie (wbudowane i własne) usuwa się i przemianowuje tak samo: płatności, reguły i limit idą do nowej nazwy albo do „Inne”. Usunięta/przemianowana wbudowana ląduje w `hidden_categories`, żeby regexy z `categorize.ts` nie przywracały jej same. Reset (`DELETE /data?all=1`) czyści `hidden_categories` i `custom_categories` — wracają tylko wbudowane.
 - **Ukryte płatności** (`excluded`) — to **flaga płatności, nie kategoria** (kategoria zostaje oryginalna). Ukryta płatność nie liczy się do wydatków/przychodów w KPI, wykresów, `byCategory`, limitów ani insights, ale **liczy się** do „Ile zostaje” (`byMonth`). Filtr `includeExcluded=1` pokazuje je z powrotem (przycisk „Pokaż ukryte” w Statystykach), `excludedOnly=1` zostawia tylko ukryte (chip „Ukryte” w Płatnościach). Przełącznik to `ExcludeToggle` (ikona oka). Służy do dużych jednorazowych wydatków i przelewów między własnymi kontami. Stała `LEGACY_SKIP_CATEGORY` jest już tylko dla migracji.
 - **Konto** — aktywne konto wybiera się globalnie w sidebarze (`AccountSwitcher`, widoczny od 2 kont, zapamiętany w `localStorage` `wydatki.account`). `src/api.ts` trzyma je w module (`setActiveAccount`, ustawiane przez `App`) i dokleja `account=` do każdego zapytania; strony analizy przemontowują się przy zmianie konta (`key` w `app/App.tsx`, `followsAccount`). Pusty = wszystkie konta.
 - **Kategorie liczone są saldem** (wydatki + wpływy w danej kategorii). Przelew przychodzący w kategorii wydatkowej zmniejsza jej wydatki — tak było od początku.
-- Zmiana kategorii ma dwa zakresy (`CategorySelect`): lista zmienia **tylko tę płatność** (`onlyThis: true`); link **„Wszystkie od odbiorcy…”** otwiera `Modal` z wyborem kategorii i wyjaśnieniem, że zmienią się wszystkie dotychczasowe i przyszłe płatności od tego odbiorcy — tworzy/aktualizuje regułę z `suggestPattern(payee)`. W UI mówimy „odbiorca”, nie „pośrednik”.
+- Zmiana kategorii ma dwa zakresy (`CategorySelect`): lista zmienia **tylko tę płatność** (`onlyThis: true`, flaga `manualCategory`) — taka płatność jest wyjątkiem i reguły jej nie ruszają. Link **„Wszystkie od odbiorcy…”** otwiera `Modal` z kategorią i opcją **„Nadpisz też ręcznie ustawione”** (`force`); bez niej reguła pomija wyjątki. Powstaje/aktualizuje się reguła z `suggestPattern(payee)`. Wiersze zostają na przefiltrowanej liście (zmienia się tylko kategoria); znikną po kolejnym przeładowaniu filtra. Wynik ląduje w powiadomieniach (`category_changed`). W UI mówimy „odbiorca”, nie „pośrednik”.
 - **Płatności cykliczne** (`getInsights`): ten sam odbiorca (klucz = `suggestPattern(...).toLowerCase()`) w ≥3 miesiącach, podobna kwota. Auto-status: „aktywna”, gdy ostatnia płatność jest w ostatnim lub przedostatnim miesiącu danych. Użytkownik nadpisuje status (`auto | active | ended | hidden`) przez `PUT /recurring` → `settings.recurring_overrides` (JSON klucz → status). Kolejność (serwer i front, `RECURRING_ORDER`): nowe/nieprzejrzane (`auto`) na górze, potem ręcznie aktywne, zakończone, a `hidden` („to nie cykliczna”) na samym dole — **nie znikają**, są tylko wyszarzone (samo wykrycie jest informacją).
 - **Konto testowe** — `POST /import/demo` (`{ uncategorized?: boolean }`) generuje (`server/demo.ts`) ~6 miesięcy przykładowych płatności kończących się dziś na koncie „Konto testowe” albo — z `uncategorized` — „Konto testowe bez kategorii” (wszystko w „Inne”, do testowania reguł/AI); bank `generic`, `source = demo`. Ponowne wywołanie usuwa to konto (po nazwie) i tworzy od nowa. Przyciski: Import („Dodaj konto testowe” / „Dodaj bez kategorii”) i Ustawienia → Konta (okno z wyborem wariantu). Kategorie/reguły są wspólne, więc reguły tworzone na koncie testowym działają też na prawdziwych danych.
 - Usunięcie reguły uruchamia `recategorizeAll()` (przelicza wszystko od nowa).
@@ -65,9 +65,10 @@ API PSD2 banków jest tylko dla licencjonowanych pośredników (AISP) — bank n
 - **Wielkość płatności** — granice przedziałów w `settings.amount_buckets` (domyślnie `100, 200, 300, 500`, max 9, sortowane i bez duplikatów), edycja w Ustawienia → Wykresy. `byAmount` zwraca `{ id, label, min, max, amount, count }`, a front filtruje przez `bucketQuery(bucket)`.
 - **Oś czasu w Statystykach** — `autoGranularity`: 30 dni / miesiąc / 90 dni → dzień, cały okres → miesiąc, własny: ≤92 dni dzień, ≤365 tydzień, więcej miesiąc; ręczny przełącznik Dzień/Tydzień/Miesiąc. Dane z `byDayCategory`, kubełki z `buildBuckets` (`src/period.ts`), model wykresu w `pages/stats/useTrendChart.ts`.
 - Filtr `category` w API przyjmuje kilka nazw po przecinku (multi-select na Przeglądzie: Ctrl+klik).
-- AI (`server/ai.ts`, OpenAI-compatible `/chat/completions`, JSON mode):
+- AI (`server/modules/ai/ai.ts`): OpenAI i „Inny” przez `/chat/completions`, Gemini (`generateContent`), Claude (`/messages`); JSON mode:
+  - lista modeli z API dostawcy (`POST /ai/models`) — Ustawienia → AI pokazuje dropdown; nieaktualny zapisany model (np. wycofany `gemini-2.0-flash`) jest podmieniany na aktualny (`gemini-3.8-flash` albo pierwszy flash z listy); gdy lista nie wróci (np. „Inny”), zostaje pole tekstowe;
   - kategoryzacja bierze tylko płatności z „Inne”, grupuje je po pośredniku i zapisuje wynik jako **reguły**, więc przyszłe importy łapią się bez AI;
-  - ocena okresu to 4–8 zdań po polsku o bieżącym widoku (okres + filtry); ton: rzeczowy, bez coachingu — trzymaj się tego przy zmianach promptu.
+  - ocena okresu to 4 krótkie odpowiedzi po polsku o bieżącym widoku (okres + filtry): główny wydatek, na co poszło najwięcej poza stałymi (rachunki/czynsz), co da się uciąć, czego nie widać na pierwszy rzut oka; ton rzeczowy, konkretne nazwy i kwoty, bez coachingu.
 
 ## API (wszystko pod `/api`)
 
@@ -75,14 +76,14 @@ API PSD2 banków jest tylko dla licencjonowanych pośredników (AISP) — bank n
 | --- | --- |
 | `GET /meta[?account]` | zakres dat, liczniki (`uncategorized`, `excluded`), kategorie, limity, reguły, `hasAiKey`, `accounts`, `banks`, `amountThresholds` |
 | `GET /transactions`, `GET /stats`, `GET /insights` | wspólne filtry: `from, to, category, q, minAmount, maxAmount, kind=all\|expense\|income, sort, account, includeExcluded, excludedOnly, weekday` (`weekday` = dzień jak w JS: 0 niedziela … 6 sobota, po `date`). `insights` = top odbiorcy, największe wydatki, płatności cykliczne (z całej historii), statystyki dzienne |
-| `PATCH /transactions/:id` | `{ category, onlyThis }` i/lub `{ comment }` i/lub `{ excluded }` |
+| `PATCH /transactions/:id` | `{ category, onlyThis, force }` i/lub `{ comment }` i/lub `{ excluded }` |
 | `POST/PATCH/DELETE /categories`, `PUT /category-limits` | CRUD kategorii i limitów |
 | `GET/POST /rules`, `DELETE /rules/:id` | reguły fraz |
 | `GET/POST /accounts`, `PATCH/DELETE /accounts/:id` | konta |
 | `GET/PUT /settings/amount-buckets` | `{ thresholds }` |
 | `PUT /recurring` | `{ key, status: auto\|active\|ended\|hidden }` — ręczny status płatności cyklicznej |
-| `POST /import` (multipart `file`, `account=auto\|new\|<id>`, `accountName`, `bank`, `replaceCsv=1`, `ai=1`), `POST /import/demo` (konto testowe), `DELETE /data[?all=1]` | import i czyszczenie; `auto` łączy po IBAN, potem po banku, inaczej tworzy konto |
-| `POST /ai/key`, `POST /ai/categorize`, `GET /ai/evaluations`, `POST /ai/evaluate` | AI |
+| `POST /import` (multipart `file`, `account=auto\|new\|<id>`, `accountName`, `bank`, `replaceCsv=1`, `ai=1`), `POST /import/demo` (konto testowe), `DELETE /data[?all=1]` | import i czyszczenie; `all=1` to pełny reset (wbudowane kategorie wracają, własne znikają, klucz AI zostaje); `auto` łączy po IBAN, potem po banku, inaczej tworzy konto |
+| `POST /ai/key` (`provider`, `apiKey`, `model`, `baseUrl`), `POST /ai/models`, `POST /ai/categorize`, `GET /ai/evaluations`, `POST /ai/evaluate` | AI |
 | `GET /bank/status` | `{ gocardless, enablebanking: { hasKeys, appId, redirectUrl, sessions }, accounts }` |
 | `/bank/gocardless/*` | `secrets`, `institutions`, `connect`, `sync` |
 | `/bank/enablebanking/*` | `keys`, `aspsps`, `connect`, `callback`, `sync` |
@@ -91,15 +92,15 @@ Front woła API wyłącznie przez `src/api.ts`. Kształty danych (i odpowiedzi A
 
 ## Ekrany
 
-Sidebar: przełącznik konta (od 2 kont), potem dwie grupy: **Analiza** (Przegląd, Statystyki, Płatności, Limity) i **Dane** (Import, Ustawienia). Nawigacja: `navigate(page, settingsTab?)` z `useApp()` (typ `Navigate` z `app/navigation.ts`) — tak linkuj np. „Ustaw klucz AI” → `("settings", "ai")`.
+Sidebar: przełącznik konta (od 2 kont), potem dwie grupy: **Analiza** (Przegląd, Statystyki, Płatności, Kategorie) i **Dane** (Import, Ustawienia). Nawigacja: `navigate(page, settingsTab?)` z `useApp()` (typ `Navigate` z `app/navigation.ts`) — tak linkuj np. „Ustaw klucz AI” → `("settings", "ai")`. Id strony kategorii zostaje `limits`.
 
-- **Przegląd** (`pages/dashboard/`: `Dashboard` + `HeroSummary`, `CategoryChartCard`, `MiniCharts`, `NoDataYet`) — domyślnie ostatni miesiąc z danymi. Układ `dash-grid`: lewa kolumna (hero z KPI + porównanie do poprzedniego porównywalnego okresu + ocena AI, obok wykres kategorii słupki/kołowy — tam też widać przekroczone limity; pod spodem mini-wykresy: dni tygodnia i wielkość płatności — **oba klikalne, filtrują listę** (chip „Piątki” / „100–200 zł”), miesiące). Panelu limitów na Przeglądzie celowo nie ma (jest zakładka Limity). Prawa kolumna to przyklejony **`PaymentPanel`** z listą płatności filtrowaną kliknięciami w wykresy (tam też `ExcludeToggle`).
+- **Przegląd** (`pages/dashboard/`: `Dashboard` + `HeroSummary`, `CategoryChartCard`, `MiniCharts`, `NoDataYet`) — domyślnie ostatni miesiąc z danymi. Układ `dash-grid`: lewa kolumna (hero z KPI + porównanie do poprzedniego porównywalnego okresu + ocena AI, obok wykres kategorii słupki/kołowy — tam też widać przekroczone limity; pod spodem mini-wykresy: dni tygodnia i wielkość płatności — **oba klikalne, filtrują listę** (chip „Piątki” / „100–200 zł”), miesiące). Panelu limitów na Przeglądzie celowo nie ma (jest strona Kategorie). Prawa kolumna to przyklejony **`PaymentPanel`** z listą płatności filtrowaną kliknięciami w wykresy (tam też `ExcludeToggle`).
 - **Statystyki** (`pages/stats/`: `Stats` trzyma stan i układ, każda karta w osobnym pliku — `TrendCard`, `DrillPanel`, `LeftoverCard`, `MonthMatrixCard`, `DailyCard`, `CompareCard`, `TopPayeesCard`, `BiggestCard`, `RecurringCard`) — `PeriodBar` z `sticky` (przyklejony u góry przy przewijaniu, klasa `.stuck` dodaje cień; ≤760px wraca do zwykłego). Linie kategorii w czasie (podział dzień/tydzień/miesiąc, „Pokaż ukryte”, ręczna oś Y — „Oś Y do” **ucina** wszystko powyżej przez `clipPath`, przerywana linia u góry sygnalizuje ucięcie). „Szczegóły okresu” (`.insight-grid`) to flex-wrap: karty rosną, żeby nie zostawało puste miejsce; „Gdzie idzie najwięcej” ma `.grow` (2×), „Porównanie” (`.compare`) idzie na koniec, cykliczne (`.wide`) na pełną szerokość. Tooltip stoi w górnym rogu wykresu **po przeciwnej stronie niż kursor** (kursor w lewej połowie → tooltip z prawej i odwrotnie). **Klik w punkt** otwiera pod wykresem `DrillPanel` z płatnościami tej kategorii w tym kubełku; **klik w kategorię w legendzie** izoluje ją i otwiera `DrillPanel` dla całego okresu (`PERIOD_KEY`), drugi klik przywraca wszystko. Dalej: pasek oceny AI, „Ile zostaje”, macierz kategoria × miesiąc (tylko gdy ≥2 miesiące), sekcja „Szczegóły okresu”: dzień po dniu, porównanie z poprzednim okresem, top odbiorcy, największe wydatki, płatności cykliczne (status w `select.status-select`: auto / aktywna / zakończona / to nie cykliczna).
 - **Płatności** (`Transactions.tsx`) — pełna tabela: wyszukiwarka (też po komentarzach), segment rodzaju, kategoria, zakres kwot, chip „Nieskategoryzowane”, chip „Ukryte”, przycisk AI (bez klucza: „Ustaw klucz AI, żeby kategoryzować”), sortowanie po nagłówkach, komentarze inline (`CommentNote`), ukrywanie (`ExcludeToggle`).
-- **Limity** (`Limits.tsx`) — KPI, wykorzystanie w okresie (`CategoryLimits` bez `onSelect`), tabela z edycją limitu miesięcznego każdej kategorii.
+- **Kategorie** (`Limits.tsx`, id `limits`) — KPI i wykorzystanie limitów w okresie (`CategoryLimits` bez `onSelect`), tabela kategorii (nazwa, wydane, limit miesięczny, wykorzystanie, zmiana nazwy / usunięcie; „Inne” tylko jako domyślna), „Nowa kategoria”, reguły po frazie.
 - **Import** (`ImportPage.tsx`) — wybór konta (auto / istniejące / „+ Nowe konto…” w `Modal`) i banku (albo „Rozpoznaj z pliku”), instrukcja „Skąd wziąć plik” dla wybranego banku, demo, czyszczenie.
-- **Ustawienia** (`Settings.tsx` + `pages/settings/*Tab.tsx`) — zakładki: Kategorie (lista, zmiana nazwy, usuwanie, „Nowa kategoria” w `NewCategoryDialog`, reguły), AI (klucz OpenAI + kategoryzacja), Konta, Połączenie z bankiem (Enable Banking / GoCardless), Wykresy (przedziały kwot).
-- Okna dialogowe: `Modal.tsx` (natywny `<dialog>`, fokus na pierwsze pole). Nie używaj `window.prompt`; `confirm` tylko dla operacji nieodwracalnych.
+- **Ustawienia** (`Settings.tsx` + `pages/settings/*Tab.tsx`) — zakładki: AI (dostawca: OpenAI / Gemini / Claude / Inny, klucz, lista modeli z API albo pole tekstowe, kategoryzacja), Konta, Połączenie z bankiem (Enable Banking / GoCardless), Wykresy (przedziały kwot), Aplikacja (pełny reset: płatności, konta, własne kategorie, reguły, limity; wracają wbudowane kategorie, także usunięte).
+- Okna dialogowe: `Modal.tsx` (natywny `<dialog>`, fokus na pierwsze pole) i `ConfirmDialog` do potwierdzeń (reset aplikacji). Nie używaj `window.prompt`; `window.confirm` tylko gdy nie ma jeszcze okna z aplikacji.
 - `PeriodBar` jest nagłówkiem każdej strony analizy: eyebrow z nazwą strony, strzałki ‹ › (także klawisze ←/→) przesuwające okres o jego długość, tytuł otwierający picker miesięcy, „Ten miesiąc” przy tytule (gdy jesteśmy w innym okresie), segment Ten miesiąc / 30 dni / 90 dni / Cały okres / Własny (duplikat „Ten miesiąc” jest celowy — na prośbę użytkownika). Prop `sticky` przykleja go do góry strony.
 
 ## Design system („nowy design”, commit `3c05d51`)
@@ -159,7 +160,8 @@ Jasny, spokojny, „fintech/dashboard” — biała karta na szarym tle, granato
 
 **Front:**
 - `app/AppContext.tsx` + `useApp()` — `meta` (odpowiedź `/api/meta`: konta, banki, kategorie, limity, reguły, liczniki, klucz AI, progi, tryb aplikacji), `refreshMeta()`, `account`/`chooseAccount`, `reloadPage()`, `navigate`. `App` pobiera świeże `/meta` przy każdej zmianie strony/konta i montuje stronę dopiero po nim, więc strony czytają dane z kontekstu zamiast pobierać `/meta` same. Po zmianie, która wpływa na te dane (kategoria, limit, konto, klucz AI…), wołaj `await refreshMeta()`.
-- `hooks/`: `useAsync(load, deps, delay?)` (ładowanie z odrzucaniem nieaktualnych odpowiedzi, `reload`, `setData`), `useTransactionList` (lista płatności + updatery), `useTransactionEdits` (kategoria/komentarz/ukrycie: optymistycznie tylko edytowany wiersz, potem `onSaved` / przy błędzie `onFailed`). **Po zmianie kategorii „od odbiorcy” ani po ukryciu nie przeładowuj listy** — wiersz musi zostać na miejscu (także w przefiltrowanym widoku i w „Największych wydatkach”), żeby dało się zmianę od razu cofnąć; odświeżaj tylko sumy/wykresy i `refreshMeta()`, `useAction` (busy + baner ok/błąd + `run(fn, fallback)`), `usePeriod("month" | "all")`, `useComparison` (poprzedni porównywalny okres), `useDismiss`, `useFileDrop`.
+- `hooks/`: `useAsync(load, deps, delay?)` (ładowanie z odrzucaniem nieaktualnych odpowiedzi, `reload`, `setData`), `useTransactionList` (lista płatności + updatery), `useTransactionEdits` (kategoria/komentarz/ukrycie: optymistycznie wiersze na miejscu, potem `onSaved` / przy błędzie `onFailed`). Zmiana kategorii (także „od odbiorcy”) i ukrycie zostają na przefiltrowanej liście — kategoria się zmienia, wiersze nie znikają; filtr odświeża listę przy kolejnym kliknięciu. `useAction` (busy + baner ok/błąd + `run(fn, fallback)`), `usePeriod("month" | "all")`, `useComparison` (poprzedni porównywalny okres), `useDismiss`, `useFileDrop`.
+- Powiadomienia (`app/notifications.ts`, dzwonek w prawym górnym rogu): krótki toast + lista. Typ `category_changed` po zmianie od odbiorcy; klik otwiera Płatności (opcjonalnie z `q`). „Wyczyść” kasuje listę.
 - `components/ui/`: `Notices` (banery ok/błąd, opcjonalnie z zamknięciem), `Segmented`, `CategoryTag`/`Swatch`; oraz `EmptyPeriod`, `NewAccountDialog`/`BankSelect`, `DownloadButton`, `AccountSwitcher`, `MonthPicker`. Wspólne komunikaty wyników: `src/messages.ts`.
 
 ## Mapa plików
@@ -176,11 +178,11 @@ server/
   banking/        enablebanking, gocardless, http (providerFetch)
   transaction.ts  newTransaction, hashId
   categorize.ts   wbudowane reguły regex, categorizer()
-  ai.ts           OpenAI: kategoryzacja i ocena okresu
+  ai.ts           AI (OpenAI / Gemini / Claude / zgodny z OpenAI): kategoryzacja i ocena okresu
   demo.ts         „Konto testowe” (generator + resetDemoAccount)
   runtime.ts      appRoot, packaged/hosted, .env, serverEnv(), porty i adresy
   sessions.ts     tryb online: sesje (cookie) → baza w pamięci
-  fixtures/pko-przyklad.csv   przykładowy wyciąg PKO (do testów parsera i snapshotu)
+  fixtures/pko-sample.csv     przykładowy wyciąg PKO (do testów parsera i snapshotu)
 scripts/
   package-win.mjs budowanie Wydatki.exe (Node SEA + postject) i zipa
   api-snapshot.mjs  zrzut/porównanie odpowiedzi API na kopii bazy
@@ -196,8 +198,8 @@ src/
   hooks/          useAsync, useAction, usePeriod, useComparison, useTransactionList, useTransactionEdits, …
   styles/         design system (tokens, base, …, responsive), importowany przez index.css
   components/     Layout, AccountSwitcher, PeriodBar, MonthPicker, PaymentPanel, CategorySelect, CommentNote,
-                  CategoryLimits, AiEvaluationCard, Icon, Modal, NewCategoryDialog, NewAccountDialog,
-                  EmptyPeriod, ExcludeToggle, DownloadButton; charts/ (wykresy SVG); ui/ (drobne klocki)
+                  CategoryLimits, AiEvaluationCard, Icon, Modal, ConfirmDialog, NotificationCenter, NewCategoryDialog,
+                  NewAccountDialog, EmptyPeriod, ExcludeToggle, DownloadButton; charts/ (wykresy SVG); ui/ (drobne klocki)
   pages/          Transactions, Limits, ImportPage, Settings; dashboard/, stats/, settings/ (zakładki)
 ```
 

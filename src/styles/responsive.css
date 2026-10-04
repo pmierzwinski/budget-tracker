@@ -76,7 +76,7 @@
 @media (max-width: 1360px) and (min-width: 761px) {
   .limit-table-head,
   .limit-line {
-    grid-template-columns: minmax(0, 1fr) 7rem 8.5rem minmax(8rem, 12rem);
+    grid-template-columns: minmax(0, 1fr) 7rem 8.5rem minmax(8rem, 12rem) 12.5rem;
   }
 }
 
@@ -228,6 +228,12 @@
 
   .limit-line > .num {
     text-align: right;
+  }
+
+  .limit-line > .cat-actions,
+  .limit-line > .cat-default {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
   }
 
   .limit-usage,

@@ -1,11 +1,11 @@
 // "Konto testowe": ~6 months of sample payments ending today (seeded, so the same every time on a given day).
-import { DEFAULT_CATEGORY } from "../shared/domain.ts";
-import { isoDate } from "../shared/dates.ts";
-import { round2 } from "../shared/numbers.ts";
-import type { DemoResult, Transaction } from "../shared/types.ts";
-import type { Categorizer } from "./categorize.ts";
-import { createAccount, dateBounds, deleteAccountByName, getAccount, insertTransactions, listAccounts, userCategorizer } from "./db/index.ts";
-import { hashId, newTransaction } from "./transaction.ts";
+import { DEFAULT_CATEGORY } from "../../../shared/domain.ts";
+import { isoDate } from "../../../shared/dates.ts";
+import { round2 } from "../../../shared/numbers.ts";
+import type { DemoResult, Transaction } from "../../../shared/types.ts";
+import { createAccount, dateBounds, deleteAccountByName, getAccount, insertTransactions, listAccounts, userCategorizer } from "../../db/index.ts";
+import type { Categorizer } from "../categories/categorizer.ts";
+import { hashId, newTransaction } from "../transactions/model.ts";
 
 export const DEMO_ACCOUNT = "Konto testowe";
 export const DEMO_RAW_ACCOUNT = "Konto testowe bez kategorii";

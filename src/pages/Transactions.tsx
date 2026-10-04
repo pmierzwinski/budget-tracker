@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DEFAULT_CATEGORY } from "../../shared/domain.ts";
 import { api } from "../api";
 import { useApp } from "../app/AppContext";
@@ -9,7 +9,7 @@ import { Icon } from "../components/Icon";
 import { PeriodBar } from "../components/PeriodBar";
 import { Notices } from "../components/ui/Notices";
 import { Segmented } from "../components/ui/Segmented";
-import { formatDay, money, plural, txName, txWho } from "../format";
+import { formatDay, money, txName, txWho } from "../format";
 import { useAction } from "../hooks/useAction";
 import { usePeriod } from "../hooks/usePeriod";
 import { useTransactionEdits, type TransactionChange } from "../hooks/useTransactionEdits";
@@ -39,20 +39,11 @@ function savedMessage(change: TransactionChange): string {
       ? `„${who}” nie liczy się już do wykresów, limitów ani wydatków.`
       : `„${who}” znów liczy się do statystyk.`;
   }
-  if (change.type === "category" && change.scope === "merchant") {
-    const who = change.pattern || change.item.payee || change.item.title || "tego odbiorcy";
-    return `Kategoria „${change.category}” dla wszystkich płatności od „${who}” — zmieniono ${change.updated} ${plural(
-      change.updated,
-      "płatność",
-      "płatności",
-      "płatności",
-    )}. Przyszłe importy też tu trafią.`;
-  }
   return "";
 }
 
 export function Transactions() {
-  const { meta, refreshMeta, navigate } = useApp();
+  const { meta, refreshMeta, navigate, txQuery, clearTxQuery } = useApp();
   const { period, setPeriod } = usePeriod("all");
   const [category, setCategory] = useState(ALL);
   const [kind, setKind] = useState<TxKind>("all");
@@ -68,6 +59,12 @@ export function Transactions() {
     [period.from, period.to, category, q, minAmount, maxAmount, kind, sort, excludedOnly],
     150,
   );
+  useEffect(() => {
+    if (!txQuery) return;
+    setQ(txQuery);
+    clearTxQuery();
+  }, [txQuery, clearTxQuery]);
+
   const edits = useTransactionEdits({
     updateItems: list.updateItems,
     addCategory: list.addCategory,
@@ -196,7 +193,7 @@ export function Transactions() {
             <button
               type="button"
               className="ghost ai-setup"
-              title="Kategoryzacja AI wymaga klucza OpenAI"
+              title="Kategoryzacja AI wymaga klucza AI"
               onClick={() => navigate("settings", "ai")}
             >
               <Icon name="sparkle" size={16} />
@@ -257,7 +254,7 @@ export function Transactions() {
                       value={item.category}
                       categories={categories}
                       who={txWho(item)}
-                      onChange={(next, scope) => void edits.changeCategory(item, next, scope)}
+                      onChange={(next, scope, options) => void edits.changeCategory(item, next, scope, options)}
                     />
                   </td>
                   <td className={item.amount < 0 ? "num neg strong" : "num pos strong"}>{money(item.amount)}</td>
@@ -267,13 +264,19 @@ export function Transactions() {
             {!items.length && (
               <tr>
                 <td colSpan={4} className="muted empty-row">
-                  Brak transakcji dla wybranych filtrów.{" "}
-                  {filtered ? (
-                    <button type="button" className="link-btn" onClick={resetFilters}>
-                      Wyczyść filtry
-                    </button>
+                  {list.loading ? (
+                    "Ładowanie…"
                   ) : (
-                    "Sprawdź zakres dat."
+                    <>
+                      Brak transakcji dla wybranych filtrów.{" "}
+                      {filtered ? (
+                        <button type="button" className="link-btn" onClick={resetFilters}>
+                          Wyczyść filtry
+                        </button>
+                      ) : (
+                        "Sprawdź zakres dat."
+                      )}
+                    </>
                   )}
                 </td>
               </tr>

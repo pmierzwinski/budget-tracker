@@ -1,6 +1,6 @@
 // Banks described by a column profile, plus Santander's headerless export.
-import { round2 } from "../../shared/numbers.ts";
-import type { Transaction } from "../../shared/types.ts";
+import { round2 } from "../../../../shared/numbers.ts";
+import type { Transaction } from "../../../../shared/types.ts";
 import type { BankId } from "./banks.ts";
 import { clean, findIban, normalizeHeader, parseAmount, parseDate, payeeFromText } from "./cells.ts";
 import type { Drafter } from "./draft.ts";

@@ -137,9 +137,10 @@ export function Dashboard() {
           onClearAmount={() => setAmountBucket("")}
           weekdayFilter={weekdayIndex >= 0 ? WEEKDAY_NAMES[weekdayIndex] : undefined}
           onClearWeekday={() => setWeekday(null)}
-          onCategoryChange={(item, next, scope) => void edits.changeCategory(item, next, scope)}
+          onCategoryChange={(item, next, scope, options) => void edits.changeCategory(item, next, scope, options)}
           onCommentChange={(item, next) => void edits.changeComment(item, next)}
           onExcludedChange={(item, excluded) => void edits.changeExcluded(item, excluded)}
+          loading={list.loading}
         />
       </div>
     </section>

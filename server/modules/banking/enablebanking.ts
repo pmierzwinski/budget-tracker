@@ -1,11 +1,11 @@
 // Open Banking through Enable Banking (free private mode for your own accounts).
 import { createSign, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import type { Institution, Transaction } from "../../shared/types.ts";
-import { getJsonSetting, getSetting, linkedAccounts, setJsonSetting, setSetting, upsertLinkedAccount, userCategorizer } from "../db/index.ts";
-import { apiUrl, publicUrl, serverEnv } from "../runtime.ts";
-import { hashId, newTransaction, utcDay } from "../transaction.ts";
-import type { Categorizer } from "../categorize.ts";
+import type { Institution, Transaction } from "../../../shared/types.ts";
+import { getJsonSetting, getSetting, linkedAccounts, setJsonSetting, setSetting, upsertLinkedAccount, userCategorizer } from "../../db/index.ts";
+import { apiUrl, publicUrl, serverEnv } from "../../runtime.ts";
+import type { Categorizer } from "../categories/categorizer.ts";
+import { hashId, newTransaction, utcDay } from "../transactions/model.ts";
 import { providerFetch, sortInstitutions } from "./http.ts";
 
 const API = "https://api.enablebanking.com";

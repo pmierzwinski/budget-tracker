@@ -1,4 +1,4 @@
-import { CategorySelect, type CategoryScope } from "./CategorySelect";
+import { CategorySelect, type CategoryChangeOptions, type CategoryScope } from "./CategorySelect";
 import { CommentNote } from "./CommentNote";
 import { ExcludeToggle } from "./ExcludeToggle";
 import { Icon } from "./Icon";
@@ -34,6 +34,7 @@ export function PaymentPanel({
   onCategoryChange,
   onCommentChange,
   onExcludedChange,
+  loading,
 }: {
   items: Transaction[];
   sort: PaySort;
@@ -46,16 +47,17 @@ export function PaymentPanel({
   onClearAmount?: () => void;
   weekdayFilter?: string;
   onClearWeekday?: () => void;
-  onCategoryChange: (item: Transaction, category: string, scope: CategoryScope) => void;
+  onCategoryChange: (item: Transaction, category: string, scope: CategoryScope, options?: CategoryChangeOptions) => void;
   onCommentChange: (item: Transaction, comment: string) => void;
   onExcludedChange?: (item: Transaction, excluded: boolean) => void;
+  loading?: boolean;
 }) {
   return (
     <aside className="pay-panel">
       <div className="pay-panel-head">
         <div className="pay-head-row">
           <h2>
-            Płatności <span className="count">{items.length}</span>
+            Płatności <span className="count">{loading ? "…" : items.length}</span>
           </h2>
           <div className="segmented sm" role="group" aria-label="Sortowanie">
             <button
@@ -116,7 +118,7 @@ export function PaymentPanel({
                     value={item.category}
                     categories={categories}
                     who={txWho(item)}
-                    onChange={(next, scope) => onCategoryChange(item, next, scope)}
+                    onChange={(next, scope, options) => onCategoryChange(item, next, scope, options)}
                   />
                   {item.title ? (
                     <span className="pay-title" title={item.title}>
@@ -137,7 +139,9 @@ export function PaymentPanel({
             </article>
           );
         })}
-        {!items.length && <p className="muted pay-empty">Brak płatności w tym widoku.</p>}
+        {!items.length && (
+          <p className="muted pay-empty">{loading ? "Ładowanie…" : "Brak płatności w tym widoku."}</p>
+        )}
       </div>
     </aside>
   );

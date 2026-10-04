@@ -1,5 +1,5 @@
-import { BUILTIN_CATEGORIES, DEFAULT_CATEGORY, isBuiltinCategory } from "../../shared/domain.ts";
-import { changes, db, transaction } from "./core.ts";
+import { BUILTIN_CATEGORIES, DEFAULT_CATEGORY, isBuiltinCategory } from "../../../shared/domain.ts";
+import { changes, db, transaction } from "../../platform/db.ts";
 
 /** Built-in categories the user removed or renamed; their regex hits land in "Inne". */
 export function hiddenCategoryNames(): Set<string> {

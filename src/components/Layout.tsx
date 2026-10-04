@@ -4,6 +4,7 @@ import { NAV_GROUPS, type Page } from "../app/navigation";
 import { AccountSwitcher } from "./AccountSwitcher";
 import { DownloadButton } from "./DownloadButton";
 import { Icon } from "./Icon";
+import { NotificationCenter } from "./NotificationCenter";
 
 export function Layout({ page, children }: { page: Page; children: ReactNode }) {
   const { meta, navigate } = useApp();
@@ -56,7 +57,10 @@ export function Layout({ page, children }: { page: Page; children: ReactNode }) 
           {app.downloadUrl ? <DownloadButton url={app.downloadUrl} quiet={!app.hosted} /> : null}
         </div>
       </aside>
-      <main className="content">{children}</main>
+      <main className="content">
+        <NotificationCenter />
+        {children}
+      </main>
     </div>
   );
 }

@@ -1,15 +1,33 @@
 import { Router } from "express";
-import { categorizeWithAi, evaluateCurrentPeriod, hasAiKey, saveAiKey } from "../ai.ts";
 import { countUncategorized, listCategories, listPeriodEvaluations } from "../db/index.ts";
-import { readFilters, route, text, typed } from "./http.ts";
+import { aiPublic, categorizeWithAi, evaluateCurrentPeriod, hasAiKey, listAiModels, saveAiSettings } from "../modules/ai/ai.ts";
+import { readFilters, route, text, typed } from "../platform/http.ts";
 
 export const aiRoutes = Router();
 
 aiRoutes.post(
   "/ai/key",
   route("Nie zapisano klucza", (req) => {
-    saveAiKey(text(req.body?.apiKey));
-    return { ok: true, hasAiKey: hasAiKey() };
+    const body = req.body || {};
+    saveAiSettings({
+      provider: text(body.provider) || "openai",
+      apiKey: text(body.apiKey),
+      model: text(body.model),
+      baseUrl: text(body.baseUrl),
+    });
+    return { ok: true, hasAiKey: hasAiKey(), ai: aiPublic() };
+  }),
+);
+
+aiRoutes.post(
+  "/ai/models",
+  route("Nie pobrano listy modeli", async (req) => {
+    const body = req.body || {};
+    return listAiModels({
+      provider: text(body.provider),
+      apiKey: text(body.apiKey),
+      baseUrl: text(body.baseUrl),
+    });
   }),
 );
 

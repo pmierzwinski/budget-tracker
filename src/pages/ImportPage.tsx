@@ -75,12 +75,12 @@ export function ImportPage() {
 
   async function clear(all: boolean) {
     const question = all
-      ? "Usunąć transakcje, konta, kategorie własne i reguły?"
+      ? "Usunąć transakcje, konta, własne kategorie, reguły i limity? Wrócą tylko wbudowane kategorie."
       : "Usunąć wszystkie transakcje? Konta, kategorie i reguły zostaną.";
     if (!confirm(question)) return;
     await run(async () => {
       await api.clear(all);
-      setMessage(all ? "Wyczyszczono całą lokalną bazę wydatków." : "Wyczyszczono transakcje.");
+      setMessage(all ? "Wyczyszczono bazę. Zostały tylko wbudowane kategorie." : "Wyczyszczono transakcje.");
       await imported("");
     }, "Nie udało się wyczyścić danych");
   }
@@ -186,7 +186,7 @@ export function ImportPage() {
                   <small>od razu po imporcie, tylko to, co trafi do Inne</small>
                 ) : (
                   <small>
-                    Wymaga klucza OpenAI —{" "}
+                    Wymaga klucza AI —{" "}
                     <button type="button" className="link-btn" onClick={() => navigate("settings", "ai")}>
                       ustaw klucz AI
                     </button>

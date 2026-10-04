@@ -33,14 +33,19 @@ function listen(candidate: number, attempts: number) {
     }
   });
   server.on("error", async (error: NodeJS.ErrnoException) => {
-    if (error.code !== "EADDRINUSE" || !packaged || attempts <= 0) throw error;
-    if (await runningHere(candidate)) {
-      console.log("Wydatki już działają — otwieram przeglądarkę.");
-      openBrowser(`http://127.0.0.1:${candidate}`);
-      setTimeout(() => process.exit(0), 500);
+    if (error.code !== "EADDRINUSE") throw error;
+    if (packaged && attempts > 0) {
+      if (await runningHere(candidate)) {
+        console.log("Wydatki już działają — otwieram przeglądarkę.");
+        openBrowser(`http://127.0.0.1:${candidate}`);
+        setTimeout(() => process.exit(0), 500);
+        return;
+      }
+      listen(candidate + 1, attempts - 1);
       return;
     }
-    listen(candidate + 1, attempts - 1);
+    console.error(`Port ${candidate} jest zajęty. Zamknij inną instancję albo uruchom z PORT=${candidate + 1}.`);
+    process.exit(1);
   });
 }
 

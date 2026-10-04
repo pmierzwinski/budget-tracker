@@ -1,6 +1,6 @@
 // Building new transactions — shared by CSV import, Open Banking sync and demo data.
 import { createHash } from "node:crypto";
-import type { Transaction } from "../shared/types.ts";
+import type { Transaction } from "../../../shared/types.ts";
 
 /** Stable 24-char id from parts. Changing how ids are built duplicates history on re-import. */
 export function hashId(parts: (string | number)[]): string {
@@ -28,6 +28,7 @@ export function newTransaction(input: NewTransaction): Transaction {
     category: input.category,
     comment: "",
     excluded: false,
+    manualCategory: false,
     source: input.source,
     externalId: input.externalId,
     createdAt: input.createdAt || new Date().toISOString(),

@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { DEFAULT_CATEGORY } from "../../shared/domain.ts";
-import type { CategoryRule } from "../../shared/types.ts";
-import { categorizer, type Categorizer } from "../categorize.ts";
+import { DEFAULT_CATEGORY } from "../../../shared/domain.ts";
+import type { CategoryRule } from "../../../shared/types.ts";
+import { rowToTx } from "../../db/rows.ts";
+import { changes, db, transaction, type Row } from "../../platform/db.ts";
+import { categorizer, type Categorizer } from "./categorizer.ts";
 import { ensureCategory, hiddenCategoryNames, scrubHiddenCategories } from "./categories.ts";
-import { changes, db, transaction, type Row } from "./core.ts";
-import { rowToTx } from "./rows.ts";
 
 type RuleRow = { id: string; pattern: string; category: string; created_at: string };
 
@@ -24,7 +24,11 @@ export function userCategorizer(): Categorizer {
   return categorizer(listRules(), hiddenCategoryNames());
 }
 
-export function upsertRule(pattern: string, category: string): { rule: CategoryRule; updated: number } {
+export function upsertRule(
+  pattern: string,
+  category: string,
+  options: { force?: boolean } = {},
+): { rule: CategoryRule; updated: number } {
   const trimmed = pattern.trim();
   if (trimmed.length < 2) throw new Error("Fraza musi mieć co najmniej 2 znaki.");
   const target = category.trim() || DEFAULT_CATEGORY;
@@ -46,7 +50,7 @@ export function upsertRule(pattern: string, category: string): { rule: CategoryR
       rule.createdAt,
     );
   }
-  return { rule, updated: applyRule(rule.pattern, rule.category) };
+  return { rule, updated: applyRule(rule.pattern, rule.category, Boolean(options.force)) };
 }
 
 /** Deletes a rule and recategorizes everything, so its payments fall back to the remaining rules. */
@@ -55,12 +59,18 @@ export function deleteRule(id: string): void {
   recategorizeAll();
 }
 
-function applyRule(pattern: string, category: string): number {
+function applyRule(pattern: string, category: string, force = false): number {
   const like = `%${pattern}%`;
+  const flag = force ? 1 : 0;
   return changes(
     db
-      .prepare("UPDATE transactions SET category = ? WHERE payee LIKE ? OR title LIKE ? OR description LIKE ? OR type LIKE ?")
-      .run(category, like, like, like, like),
+      .prepare(
+        `UPDATE transactions
+         SET category = ?, manual_category = CASE WHEN ? = 1 THEN 0 ELSE manual_category END
+         WHERE (payee LIKE ? OR title LIKE ? OR description LIKE ? OR type LIKE ?)
+           AND (manual_category = 0 OR ? = 1)`,
+      )
+      .run(category, flag, like, like, like, like, flag),
   );
 }
 
@@ -72,6 +82,7 @@ export function recategorizeAll(): number {
     let count = 0;
     for (const row of rows) {
       const tx = rowToTx(row);
+      if (tx.manualCategory) continue;
       const next = categorize(tx);
       if (next !== tx.category) {
         update.run(next, tx.id);

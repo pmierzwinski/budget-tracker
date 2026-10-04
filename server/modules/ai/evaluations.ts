@@ -1,6 +1,6 @@
-import type { PeriodEvaluation } from "../../shared/types.ts";
-import { db, type Row } from "./core.ts";
-import { rowToEvaluation } from "./rows.ts";
+import type { PeriodEvaluation } from "../../../shared/types.ts";
+import { rowToEvaluation } from "../../db/rows.ts";
+import { db, type Row } from "../../platform/db.ts";
 
 export function listPeriodEvaluations(): PeriodEvaluation[] {
   return (db.prepare("SELECT * FROM period_evaluations ORDER BY scope ASC").all() as Row[]).map(rowToEvaluation);

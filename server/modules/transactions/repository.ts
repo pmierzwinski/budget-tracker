@@ -1,10 +1,11 @@
 import type { SQLInputValue } from "node:sqlite";
-import { DEFAULT_CATEGORY, merchantPattern } from "../../shared/domain.ts";
-import type { DateBounds, InsertResult, Transaction, TxFilters, TxSort } from "../../shared/types.ts";
-import { ensureCategory } from "./categories.ts";
-import { changes, db, forAccount, transaction, type Row } from "./core.ts";
-import { upsertRule } from "./rules.ts";
-import { rowToTx } from "./rows.ts";
+import { DEFAULT_CATEGORY, merchantPattern } from "../../../shared/domain.ts";
+import type { DateBounds, InsertResult, Transaction, TxFilters, TxSort } from "../../../shared/types.ts";
+import { rowToTx } from "../../db/rows.ts";
+import { ensureCategory } from "../categories/categories.ts";
+import { upsertRule } from "../categories/rules.ts";
+import { resetUserSettings } from "../settings/store.ts";
+import { changes, db, forAccount, transaction, type Row } from "../../platform/db.ts";
 
 const UNCATEGORIZED = "(category = ? OR category = '' OR category IS NULL)";
 
@@ -15,8 +16,8 @@ export function insertTransactions(items: Transaction[], options: { replaceCsvFo
   const insert = db.prepare(`
     INSERT OR IGNORE INTO transactions
     (id, date, booking_date, amount, currency, type, payee, title, description, account_iban, account_id,
-     category, comment, excluded, source, external_id, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     category, comment, excluded, manual_category, source, external_id, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const ids: string[] = [];
   transaction(() => {
@@ -39,6 +40,7 @@ export function insertTransactions(items: Transaction[], options: { replaceCsvFo
         item.category,
         item.comment || "",
         item.excluded ? 1 : 0,
+        item.manualCategory ? 1 : 0,
         item.source,
         item.externalId,
         item.createdAt,
@@ -142,24 +144,39 @@ export function setExcluded(id: string, excluded: boolean): void {
 
 /**
  * Sets the category of one payment. Without `onlyThis` it also creates/updates a rule for the payee,
- * so all past and future payments from them follow.
+ * so all past and future payments from them follow — except those marked `manualCategory`, unless `force`.
  */
 export function applyCategory(
   id: string,
   category: string,
-  options: { onlyThis?: boolean } = {},
-): { updated: number; pattern: string } {
+  options: { onlyThis?: boolean; force?: boolean; manual?: boolean } = {},
+): { updated: number; skippedManual: number; pattern: string } {
   const target = category.trim() || DEFAULT_CATEGORY;
   ensureCategory(target);
   const tx = getTransaction(id);
-  const pattern = options.onlyThis ? "" : merchantPattern(tx);
-  if (pattern.length < 2) {
-    db.prepare("UPDATE transactions SET category = ? WHERE id = ?").run(target, id);
-    return { updated: 1, pattern: "" };
+  if (options.onlyThis) {
+    const manual = options.manual !== false;
+    db.prepare("UPDATE transactions SET category = ?, manual_category = ? WHERE id = ?").run(target, manual ? 1 : 0, id);
+    return { updated: 1, skippedManual: 0, pattern: "" };
   }
-  const { updated } = upsertRule(pattern, target);
-  db.prepare("UPDATE transactions SET category = ? WHERE id = ?").run(target, id);
-  return { updated: Math.max(updated, 1), pattern };
+  const pattern = merchantPattern(tx);
+  if (pattern.length < 2) {
+    db.prepare("UPDATE transactions SET category = ?, manual_category = 0 WHERE id = ?").run(target, id);
+    return { updated: 1, skippedManual: 0, pattern: "" };
+  }
+  const force = Boolean(options.force);
+  const skippedManual = force ? 0 : countManualMatches(pattern, id);
+  const { updated } = upsertRule(pattern, target, { force });
+  db.prepare("UPDATE transactions SET category = ?, manual_category = 0 WHERE id = ?").run(target, id);
+  return { updated: Math.max(updated, 1), skippedManual, pattern };
+}
+
+function countManualMatches(pattern: string, exceptId: string): number {
+  const like = `%${pattern}%`;
+  return count(
+    "manual_category = 1 AND id != ? AND (payee LIKE ? OR title LIKE ? OR description LIKE ? OR type LIKE ?)",
+    [exceptId, like, like, like, like],
+  );
 }
 
 export function listUncategorized(ids?: string[]): Transaction[] {
@@ -210,4 +227,5 @@ export function clearAll(): void {
   db.exec(
     "DELETE FROM accounts; DELETE FROM category_rules; DELETE FROM custom_categories; DELETE FROM hidden_categories; DELETE FROM category_limits;",
   );
+  resetUserSettings();
 }

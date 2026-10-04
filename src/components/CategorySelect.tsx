@@ -6,6 +6,8 @@ import { NewCategoryDialog } from "./NewCategoryDialog";
 
 export type CategoryScope = "one" | "merchant";
 
+export type CategoryChangeOptions = { force?: boolean };
+
 function MerchantDialog({
   open,
   merchant,
@@ -19,9 +21,10 @@ function MerchantDialog({
   value: string;
   categories: string[];
   onClose: () => void;
-  onApply: (category: string) => void;
+  onApply: (category: string, options: CategoryChangeOptions) => void;
 }) {
   const [category, setCategory] = useState(value);
+  const [force, setForce] = useState(false);
   return (
     <Modal
       open={open}
@@ -29,7 +32,7 @@ function MerchantDialog({
       eyebrow={merchant ? `Odbiorca: ${merchant}` : "Odbiorca"}
       onClose={onClose}
       onSubmit={() => {
-        onApply(category);
+        onApply(category, { force });
         onClose();
       }}
       footer={
@@ -51,10 +54,18 @@ function MerchantDialog({
           ))}
         </select>
       </label>
+      <label className="check">
+        <input type="checkbox" checked={force} onChange={(event) => setForce(event.target.checked)} />
+        <span>
+          Nadpisz też ręcznie ustawione
+          <small>
+            Płatności, którym sam zmieniłeś kategorię, zostają jako wyjątki. Zaznacz, żeby je też przestawić.
+          </small>
+        </span>
+      </label>
       <p className="field-hint">
-        Zmienią się <strong>wszystkie</strong> płatności od „{merchant || "tego odbiorcy"}” — dotychczasowe i te z
-        przyszłych importów. Powstanie reguła, którą możesz usunąć w Ustawienia → Kategorie. Żeby zmienić tylko tę
-        jedną płatność, wybierz kategorię z listy obok.
+        Powstanie reguła dla „{merchant || "tego odbiorcy"}” — przyszłe importy też tu trafią. Regułę usuniesz w
+        Kategorie. Żeby zmienić tylko tę jedną płatność, wybierz kategorię z listy obok.
       </p>
     </Modal>
   );
@@ -70,7 +81,7 @@ export function CategorySelect({
   value: string;
   categories: string[];
   who: string;
-  onChange: (category: string, scope: CategoryScope) => void;
+  onChange: (category: string, scope: CategoryScope, options?: CategoryChangeOptions) => void;
   compact?: boolean;
 }) {
   const [creating, setCreating] = useState(false);
@@ -128,7 +139,7 @@ export function CategorySelect({
           value={value}
           categories={categories}
           onClose={() => setApplyAll(false)}
-          onApply={(category) => onChange(category, "merchant")}
+          onApply={(category, options) => onChange(category, "merchant", options)}
         />
       ) : null}
     </div>

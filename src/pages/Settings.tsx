@@ -3,16 +3,16 @@ import type { BankCallback, SettingsTab } from "../app/navigation";
 import { DownloadButton } from "../components/DownloadButton";
 import { AccountsTab } from "./settings/AccountsTab";
 import { AiTab } from "./settings/AiTab";
+import { AppTab } from "./settings/AppTab";
 import { BankTab } from "./settings/BankTab";
-import { CategoriesTab } from "./settings/CategoriesTab";
 import { ChartsTab } from "./settings/ChartsTab";
 
 const TABS: { id: SettingsTab; label: string }[] = [
-  { id: "categories", label: "Kategorie" },
   { id: "ai", label: "AI" },
   { id: "accounts", label: "Konta" },
   { id: "bank", label: "Połączenie z bankiem" },
   { id: "charts", label: "Wykresy" },
+  { id: "app", label: "Aplikacja" },
 ];
 
 export function Settings({
@@ -51,7 +51,6 @@ export function Settings({
         </div>
       </header>
 
-      {tab === "categories" && <CategoriesTab />}
       {tab === "ai" && <AiTab />}
       {tab === "accounts" && <AccountsTab />}
       {tab === "bank" && appInfo.hosted ? (
@@ -73,6 +72,7 @@ export function Settings({
         <BankTab callback={bankCallback} onCallbackDone={onBankCallbackDone} />
       )}
       {tab === "charts" && <ChartsTab />}
+      {tab === "app" && <AppTab />}
     </section>
   );
 }

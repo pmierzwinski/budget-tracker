@@ -1,7 +1,7 @@
 // CSV statements from Polish banks: `parseBankCsv(buffer, { bank?, categorize })` → { bank, iban, items }.
 import Papa from "papaparse";
-import type { Transaction } from "../../shared/types.ts";
-import type { Categorizer } from "../categorize.ts";
+import type { Transaction } from "../../../../shared/types.ts";
+import type { Categorizer } from "../../categories/categorizer.ts";
 import { BANKS, type BankId } from "./banks.ts";
 import { decodeBuffer, detectDelimiter, findIban, normalizeHeader, parseDate } from "./cells.ts";
 import { createDrafter } from "./draft.ts";

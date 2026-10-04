@@ -1,11 +1,11 @@
 // Open Banking (Enable Banking, GoCardless). In hosted mode app.ts answers 403 before these routes.
 import { Router } from "express";
 import type { SyncResult, Transaction } from "../../shared/types.ts";
-import { enableBankingCallback, enableBankingStatus, listAspsps, saveEnableBankingKeys, startEnableBanking, syncEnableBanking } from "../banking/enablebanking.ts";
-import { connectionStatus, listInstitutions, saveGoCardlessSecrets, startConnection, syncAccounts } from "../banking/gocardless.ts";
 import { insertTransactions, listAccounts } from "../db/index.ts";
+import { enableBankingCallback, enableBankingStatus, listAspsps, saveEnableBankingKeys, startEnableBanking, syncEnableBanking } from "../modules/banking/enablebanking.ts";
+import { connectionStatus, listInstitutions, saveGoCardlessSecrets, startConnection, syncAccounts } from "../modules/banking/gocardless.ts";
+import { route, text } from "../platform/http.ts";
 import { frontendUrl } from "../runtime.ts";
-import { route, text } from "./http.ts";
 
 export const bankRoutes = Router();
 

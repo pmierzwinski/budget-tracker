@@ -11,7 +11,7 @@ export type Row = Record<string, unknown>;
 const scope = new AsyncLocalStorage<DatabaseSync>();
 let fileDb: DatabaseSync | null = null;
 let initSchema: () => void = () => {
-  throw new Error("Schemat bazy nie jest zarejestrowany (importuj bazę przez db/index.ts).");
+  throw new Error("Schemat bazy nie jest zarejestrowany (importuj bazę przez db/index.ts albo schema.ts).");
 };
 
 /** Called once by schema.ts; runs on every newly opened database. */

@@ -1,10 +1,28 @@
 import { useEffect, useRef, useState } from "react";
+import { parseEvaluationText } from "../../shared/ai.ts";
 import { evaluationKey } from "../../shared/domain.ts";
 import { api, getActiveAccount } from "../api";
 import { errorMessage } from "../format";
 import type { Period } from "../period";
 import type { PeriodEvaluation } from "../types";
 import { Icon } from "./Icon";
+
+function EvaluationBody({ text, compact }: { text: string; compact?: boolean }) {
+  const sections = parseEvaluationText(text);
+  if (sections.length === 1 && !sections[0].title) {
+    return <p className={compact ? "ai-preview" : "ai-text"}>{text}</p>;
+  }
+  return (
+    <div className={compact ? "ai-sections compact" : "ai-sections"}>
+      {sections.map((section) => (
+        <section key={section.title}>
+          <h3>{section.title}</h3>
+          <p>{section.body}</p>
+        </section>
+      ))}
+    </div>
+  );
+}
 
 export type EvalFilters = {
   category?: string;
@@ -84,7 +102,7 @@ export function AiEvaluation({
     return (
       <div className={`ai ai-${variant} ai-off`}>
         <Badge />
-        <p className="muted">Ocena okresu wymaga klucza OpenAI.</p>
+        <p className="muted">Ocena okresu wymaga klucza AI.</p>
         {onSetup ? (
           <button type="button" className="ghost sm ai-ask" onClick={onSetup}>
             <Icon name="settings" size={14} />
@@ -108,7 +126,11 @@ export function AiEvaluation({
         <p className="muted ai-busy">Analizuję wydatki z tego okresu…</p>
       ) : current ? (
         <>
-          <p className="ai-preview">{current.text}</p>
+          {variant === "strip" ? (
+            <p className="ai-preview">{parseEvaluationText(current.text)[0]?.body || current.text}</p>
+          ) : (
+            <EvaluationBody text={current.text} compact />
+          )}
           <div className="ai-actions">
             <button type="button" className="link-btn" onClick={() => dialogRef.current?.showModal()}>
               Czytaj całość
@@ -148,7 +170,9 @@ export function AiEvaluation({
                 <Icon name="close" />
               </button>
             </header>
-            <p className="ai-text">{current.text}</p>
+            <div className="ai-text">
+              <EvaluationBody text={current.text} />
+            </div>
             <footer>
               <span className="muted">{current.createdAt ? stamp(current.createdAt) : ""}</span>
               <button

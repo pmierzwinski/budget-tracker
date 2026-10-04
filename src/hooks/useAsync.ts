@@ -4,6 +4,8 @@ import { errorMessage } from "../format";
 export type AsyncState<T> = {
   data: T | null;
   error: string;
+  /** True until the first successful (or failed) load. Reloads keep the previous `data`. */
+  loading: boolean;
   setData: Dispatch<SetStateAction<T | null>>;
   /** Loads again with the same inputs; the current data stays until the new one arrives. */
   reload: () => void;
@@ -40,5 +42,5 @@ export function useAsync<T>(load: () => Promise<T> | null, deps: DependencyList,
   }, [...deps, version]);
 
   const reload = useCallback(() => setVersion((value) => value + 1), []);
-  return { data, error, setData, reload };
+  return { data, error, loading: !data && !error, setData, reload };
 }

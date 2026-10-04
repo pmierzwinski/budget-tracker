@@ -144,7 +144,7 @@ async function run() {
   await get("bank-status", "/bank/status");
   await get("evaluations", "/ai/evaluations");
 
-  const csv = readFileSync(join(root, "server", "fixtures", "pko-przyklad.csv"));
+  const csv = readFileSync(join(root, "server", "fixtures", "pko-sample.csv"));
   const importCsv = (name, extra = {}) => {
     const form = new FormData();
     form.append("file", new Blob([csv]), "pko.csv");

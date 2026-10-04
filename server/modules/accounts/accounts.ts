@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import type { Account, AccountProvider } from "../../shared/types.ts";
-import { changes, db, transaction, type Row } from "./core.ts";
-import { rowToAccount } from "./rows.ts";
+import type { Account, AccountProvider } from "../../../shared/types.ts";
+import { rowToAccount } from "../../db/rows.ts";
+import { changes, db, transaction, type Row } from "../../platform/db.ts";
 
 type AccountRow = Account & { externalId: string };
 

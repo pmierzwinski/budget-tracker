@@ -1,8 +1,8 @@
-import { limitStatus } from "../../shared/domain.ts";
-import { dayNumber, daysInMonth, shiftMonth } from "../../shared/dates.ts";
-import { round2, round3 } from "../../shared/numbers.ts";
-import type { CategoryBudget, CategoryLimitSetting } from "../../shared/types.ts";
-import { db } from "./core.ts";
+import { limitStatus } from "../../../shared/domain.ts";
+import { dayNumber, daysInMonth, shiftMonth } from "../../../shared/dates.ts";
+import { round2, round3 } from "../../../shared/numbers.ts";
+import type { CategoryBudget, CategoryLimitSetting } from "../../../shared/types.ts";
+import { db } from "../../platform/db.ts";
 
 /** How many months (fractional, by days) the range covers — monthly limits are scaled by it. */
 export function periodMonthFactor(from: string, to: string): number {
