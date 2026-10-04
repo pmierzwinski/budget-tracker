@@ -1,4 +1,4 @@
-// Data shapes live in shared/types.ts (the API contract used by the server too).
-export * from "../shared/types.ts";
-export { AI_PROVIDERS, aiProvider, isAiProvider } from "../shared/ai.ts";
-export type { AiProviderId, AiPublic } from "../shared/ai.ts";
+// Data shapes live in modules/shared/types.ts (the API contract used by the server too).
+export * from "./modules/shared/types.ts";
+export { AI_PROVIDERS, aiProvider, isAiProvider } from "./modules/shared/ai.ts";
+export type { AiProviderId, AiPublic } from "./modules/shared/ai.ts";

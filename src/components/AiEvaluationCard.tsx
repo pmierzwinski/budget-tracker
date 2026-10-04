@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { parseEvaluationText } from "../../shared/ai.ts";
-import { evaluationKey } from "../../shared/domain.ts";
+import { parseEvaluationText } from "../modules/shared/ai.ts";
+import { evaluationKey } from "../modules/shared/domain.ts";
 import { api, getActiveAccount } from "../api";
 import { errorMessage } from "../format";
 import type { Period } from "../period";

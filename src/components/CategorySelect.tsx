@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { DEFAULT_CATEGORY } from "../../shared/domain.ts";
+import { DEFAULT_CATEGORY } from "../modules/shared/domain.ts";
 import { categoryColor } from "../colors";
 import { Modal } from "./Modal";
 import { NewCategoryDialog } from "./NewCategoryDialog";

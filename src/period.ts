@@ -1,5 +1,5 @@
 // Periods (from–to ranges of ISO days): presets, stepping, labels, comparison and chart time buckets.
-import { MONTHS_GENITIVE, MONTHS_NOMINATIVE, isMonthEnd, isMonthStart, isoDate, isoMonth, parseIso, shiftMonth } from "../shared/dates.ts";
+import { MONTHS_GENITIVE, MONTHS_NOMINATIVE, isMonthEnd, isMonthStart, isoDate, isoMonth, parseIso, shiftMonth } from "./modules/shared/dates.ts";
 import { formatDay, monthLabel, rangeLabel, shortMonthTick } from "./format";
 
 export type Period = { from: string; to: string };

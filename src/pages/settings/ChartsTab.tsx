@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { DEFAULT_AMOUNT_THRESHOLDS as DEFAULT_THRESHOLDS, MAX_AMOUNT_THRESHOLDS as MAX_THRESHOLDS } from "../../../shared/domain.ts";
+import { DEFAULT_AMOUNT_THRESHOLDS as DEFAULT_THRESHOLDS, MAX_AMOUNT_THRESHOLDS as MAX_THRESHOLDS } from "../../modules/shared/domain.ts";
 import { api } from "../../api";
 import { useApp } from "../../app/AppContext";
 import { Icon } from "../../components/Icon";

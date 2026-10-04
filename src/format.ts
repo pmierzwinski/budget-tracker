@@ -1,5 +1,5 @@
 // Display formatting — pl-PL, złoty. Use these instead of formatting numbers and dates inline.
-import { parseIso } from "../shared/dates.ts";
+import { parseIso } from "./modules/shared/dates.ts";
 import type { Transaction } from "./types";
 
 export function money(value: number, currency = "PLN"): string {

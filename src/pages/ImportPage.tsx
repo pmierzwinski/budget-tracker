@@ -1,13 +1,14 @@
-import { useRef, useState } from "react";
-import { api } from "../api";
+import { useEffect, useRef, useState } from "react";
+import { api, type ImportOptions } from "../api";
 import { useApp } from "../app/AppContext";
 import { Icon } from "../components/Icon";
 import { BankSelect, NewAccountDialog } from "../components/NewAccountDialog";
 import { Notices } from "../components/ui/Notices";
-import { bankLabel } from "../format";
+import { bankLabel, errorMessage, formatDay, plural } from "../format";
 import { useAction } from "../hooks/useAction";
 import { useFileDrop } from "../hooks/useFileDrop";
 import { demoAddedMessage } from "../messages";
+import type { ImportPreview } from "../types";
 
 const HOW_TO: Record<string, string[]> = {
   pko: ["Zaloguj się do iPKO.", "Konto → Historia operacji.", "Ustaw zakres dat → Pobierz → CSV."],
@@ -30,6 +31,9 @@ export function ImportPage() {
   const [target, setTarget] = useState("auto");
   const [bank, setBank] = useState("");
   const [creating, setCreating] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<ImportPreview | null>(null);
+  const [previewing, setPreviewing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const zoneRef = useRef<HTMLDivElement>(null);
 
@@ -42,14 +46,50 @@ export function ImportPage() {
     if (account && accountId !== account) chooseAccount(accountId);
   }
 
-  function handleFile(file: File) {
-    return run(async () => {
-      const result = await api.importFile(file, {
-        replaceCsv,
-        ai: useAi && hasAiKey,
-        account: target,
-        bank: bank || targetAccount?.bank || undefined,
+  const options: ImportOptions = { replaceCsv, account: target, bank: bank || targetAccount?.bank || undefined };
+  const optionsKey = JSON.stringify(options);
+  const rest = preview ? preview.fresh - preview.categorized : 0;
+
+  useEffect(() => {
+    if (!file) return;
+    let current = true;
+    setPreview(null);
+    setPreviewing(true);
+    setError("");
+    api
+      .previewImport(file, JSON.parse(optionsKey) as ImportOptions)
+      .then((result) => {
+        if (current) setPreview(result);
+      })
+      .catch((err) => {
+        if (!current) return;
+        setError(errorMessage(err, "Nie udało się odczytać pliku"));
+        setFile(null);
+      })
+      .finally(() => {
+        if (current) setPreviewing(false);
       });
+    return () => {
+      current = false;
+    };
+  }, [file, optionsKey, setError]);
+
+  function chooseFile(next: File) {
+    setMessage("");
+    setFile(next);
+  }
+
+  function cancel() {
+    setFile(null);
+    setPreview(null);
+  }
+
+  function confirmImport() {
+    if (!file) return;
+    return run(async () => {
+      const result = await api.importFile(file, { ...options, ai: useAi && hasAiKey });
+      setFile(null);
+      setPreview(null);
       const parts = [
         result.imported ? `Dodano ${result.imported} nowych transakcji` : "Nie dodano nowych transakcji",
         `${result.bankName} → konto „${result.account.name}”`,
@@ -63,7 +103,7 @@ export function ImportPage() {
     }, "Import nie powiódł się");
   }
 
-  const dragging = useFileDrop(zoneRef, { busy, onFile: (file) => void handleFile(file), onError: setError });
+  const dragging = useFileDrop(zoneRef, { busy, onFile: chooseFile, onError: setError });
 
   function loadDemo(uncategorized = false) {
     return run(async () => {
@@ -159,16 +199,33 @@ export function ImportPage() {
               onClick={(e) => e.stopPropagation()}
               onChange={(e) => {
                 const file = e.target.files?.[0];
-                if (file) void handleFile(file);
+                if (file) chooseFile(file);
                 e.target.value = "";
               }}
             />
             <span className="drop-icon">
               <Icon name="upload" size={26} />
             </span>
-            <strong>{busy ? "Importuję…" : dragging ? "Upuść plik tutaj" : "Upuść plik CSV z bankowości"}</strong>
+            <strong>
+              {busy
+                ? "Importuję…"
+                : dragging
+                  ? "Upuść plik tutaj"
+                  : file
+                    ? file.name
+                    : "Upuść plik CSV z bankowości"}
+            </strong>
             <span>
-              albo <u>kliknij, żeby wybrać</u> · {banks.filter((item) => item.id !== "generic").map((item) => item.name).join(", ")}
+              {file ? (
+                <>
+                  <u>wybierz inny plik</u> albo upuść go tutaj
+                </>
+              ) : (
+                <>
+                  albo <u>kliknij, żeby wybrać</u> ·{" "}
+                  {banks.filter((item) => item.id !== "generic").map((item) => item.name).join(", ")}
+                </>
+              )}
             </span>
           </div>
 
@@ -202,6 +259,63 @@ export function ImportPage() {
               </span>
             </label>
           </div>
+
+          {file ? (
+            <div className="import-preview" aria-live="polite">
+              {preview ? (
+                <>
+                  <p className="import-preview-title">
+                    <Icon name="check" size={18} />
+                    Odczytano {preview.total} {plural(preview.total, "płatność", "płatności", "płatności")} ·{" "}
+                    {preview.bankName}
+                    {preview.minDate ? ` · ${formatDay(preview.minDate)} – ${formatDay(preview.maxDate)}` : ""}
+                  </p>
+                  <ul className="import-preview-facts">
+                    <li>
+                      <strong>{preview.fresh}</strong> {plural(preview.fresh, "nowa", "nowe", "nowych")}
+                      {preview.duplicates ? `, ${preview.duplicates} już jest w bazie (pominę)` : ""}
+                    </li>
+                    <li>
+                      {preview.account.id
+                        ? `Trafią na konto „${preview.account.name}”`
+                        : `Powstanie nowe konto „${preview.account.name}”`}
+                    </li>
+                    {preview.fresh ? (
+                      <li>
+                        <strong>{preview.categorized}</strong> z nowych dostanie kategorię od razu (Twoje reguły i wbudowane
+                        wzorce, np. Biedronka → Spożywcze)
+                        {rest
+                          ? useAi && hasAiKey
+                            ? `; ${rest} ${plural(rest, "pozostałą", "pozostałe", "pozostałych")} skategoryzuje AI`
+                            : `; ${rest} ${plural(rest, "pozostała trafi", "pozostałe trafią", "pozostałych trafi")} do „Inne”`
+                          : ""}
+                      </li>
+                    ) : null}
+                  </ul>
+                  <div className="row">
+                    <button
+                      className="primary"
+                      type="button"
+                      disabled={busy || !preview.fresh}
+                      onClick={() => void confirmImport()}
+                    >
+                      <Icon name="upload" size={16} />
+                      {busy
+                        ? "Importuję…"
+                        : preview.fresh
+                          ? `Importuj ${preview.fresh} ${plural(preview.fresh, "płatność", "płatności", "płatności")}`
+                          : "Nic nowego do zaimportowania"}
+                    </button>
+                    <button className="ghost" type="button" disabled={busy} onClick={cancel}>
+                      Anuluj
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <p className="muted">{previewing ? "Czytam plik…" : ""}</p>
+              )}
+            </div>
+          ) : null}
 
           {message ? (
             <div className="banner ok with-action">

@@ -1,4 +1,4 @@
-import { compareRecurring } from "../../../shared/domain.ts";
+import { compareRecurring } from "../../modules/shared/domain.ts";
 import { CategoryTag } from "../../components/ui/CategoryTag";
 import { formatDay, money } from "../../format";
 import type { RecurringPayment, RecurringStatus } from "../../types";

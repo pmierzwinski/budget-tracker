@@ -2,7 +2,7 @@ import { CategorySelect, type CategoryChangeOptions, type CategoryScope } from "
 import { CommentNote } from "./CommentNote";
 import { ExcludeToggle } from "./ExcludeToggle";
 import { Icon } from "./Icon";
-import { DEFAULT_CATEGORY } from "../../shared/domain.ts";
+import { DEFAULT_CATEGORY } from "../modules/shared/domain.ts";
 import { categoryColor } from "../colors";
 import { money, shortDate, txName, txWho } from "../format";
 import type { Transaction, TxSort } from "../types";

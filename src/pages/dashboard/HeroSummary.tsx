@@ -1,8 +1,5 @@
-import { AiEvaluation, type EvalFilters } from "../../components/AiEvaluationCard";
 import { Icon } from "../../components/Icon";
-import { useApp } from "../../app/AppContext";
 import { money, percent } from "../../format";
-import type { Period } from "../../period";
 import type { Stats } from "../../types";
 import { spendOf } from "./spend";
 
@@ -23,7 +20,7 @@ function Delta({ current, previous, label }: { current: number; previous: number
   );
 }
 
-/** Spend KPI (all or the picked categories) with the change vs the previous period, totals and the AI note. */
+/** Spend KPI (all or the picked categories) with the change vs the previous period and totals. */
 export function HeroSummary({
   stats,
   previousStats,
@@ -31,8 +28,6 @@ export function HeroSummary({
   categoryFilter,
   onClearCategories,
   shownCount,
-  period,
-  evalFilters,
 }: {
   stats: Stats;
   previousStats: Stats | null;
@@ -40,10 +35,7 @@ export function HeroSummary({
   categoryFilter: string[];
   onClearCategories: () => void;
   shownCount: number | null;
-  period: Period;
-  evalFilters: EvalFilters;
 }) {
-  const { navigate } = useApp();
   const filtering = categoryFilter.length > 0;
   const heroValue = spendOf(stats, categoryFilter);
   const expenseNames = stats.byCategory.filter((slice) => slice.amount < 0).map((slice) => slice.category);
@@ -98,7 +90,6 @@ export function HeroSummary({
           </div>
         ) : null}
       </dl>
-      <AiEvaluation period={period} onSetup={() => navigate("settings", "ai")} filters={evalFilters} />
     </div>
   );
 }

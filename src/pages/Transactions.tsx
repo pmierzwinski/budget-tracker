@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { DEFAULT_CATEGORY } from "../../shared/domain.ts";
+import { DEFAULT_CATEGORY } from "../modules/shared/domain.ts";
 import { api } from "../api";
 import { useApp } from "../app/AppContext";
 import { CategorySelect } from "../components/CategorySelect";

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AI_PROVIDERS, aiProvider, type AiModelOption, type AiProviderId } from "../../../shared/ai.ts";
+import { AI_PROVIDERS, aiProvider, type AiModelOption, type AiProviderId } from "../../modules/shared/ai.ts";
 import { api } from "../../api";
 import { useApp } from "../../app/AppContext";
 import { Icon } from "../../components/Icon";

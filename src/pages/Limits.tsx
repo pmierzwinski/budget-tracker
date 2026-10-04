@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { DEFAULT_CATEGORY, limitStatus } from "../../shared/domain.ts";
-import { round2 } from "../../shared/numbers.ts";
+import { DEFAULT_CATEGORY, limitStatus } from "../modules/shared/domain.ts";
+import { round2 } from "../modules/shared/numbers.ts";
 import { api } from "../api";
 import { useApp } from "../app/AppContext";
 import { CategoryLimits } from "../components/CategoryLimits";

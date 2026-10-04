@@ -29,7 +29,7 @@ execSync("npm run build", { cwd: root, stdio: "inherit" });
 
 console.log("2/5 Serwer w jednym pliku (esbuild)…");
 await build({
-  entryPoints: [join(root, "server", "index.ts")],
+  entryPoints: [join(root, "src", "modules", "app", "main.ts")],
   outfile: join(work, "server.cjs"),
   bundle: true,
   platform: "node",

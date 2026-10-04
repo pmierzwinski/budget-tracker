@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { bucketQuery } from "../../../shared/domain.ts";
+import { bucketQuery } from "../../modules/shared/domain.ts";
 import { api } from "../../api";
+import { useApp } from "../../app/AppContext";
+import { AiEvaluation } from "../../components/AiEvaluationCard";
 import { EmptyPeriod } from "../../components/EmptyPeriod";
 import { PaymentPanel, type PaySort } from "../../components/PaymentPanel";
 import { PeriodBar } from "../../components/PeriodBar";
@@ -23,6 +25,7 @@ function toggleCategory(current: string[], category: string, additive: boolean):
 }
 
 export function Dashboard() {
+  const { navigate } = useApp();
   const { period, setPeriod, bounds } = usePeriod("month");
   const [sort, setSort] = useState<PaySort>("amount_desc");
   const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
@@ -103,18 +106,23 @@ export function Dashboard() {
               categoryFilter={categoryFilter}
               onClearCategories={() => setCategoryFilter([])}
               shownCount={listFiltered ? list.items.length : null}
-              period={period}
-              evalFilters={{
-                category: filtering ? categoryFilter.join(",") : undefined,
-                kind: activeBucket ? "expense" : undefined,
-                ...bucketQuery(activeBucket),
-              }}
             />
             <CategoryChartCard
               stats={data}
               selected={categoryFilter}
               onSelect={(category, additive) => setCategoryFilter((current) => toggleCategory(current, category, additive))}
             />
+            <div className="hero-ai">
+              <AiEvaluation
+                period={period}
+                onSetup={() => navigate("settings", "ai")}
+                filters={{
+                  category: filtering ? categoryFilter.join(",") : undefined,
+                  kind: activeBucket ? "expense" : undefined,
+                  ...bucketQuery(activeBucket),
+                }}
+              />
+            </div>
           </article>
           <MiniCharts
             stats={data}

@@ -7,6 +7,7 @@ import type {
   CategoryLimitSetting,
   CategoryRule,
   DemoResult,
+  ImportPreview,
   ImportResult,
   Insights,
   Institution,
@@ -54,6 +55,18 @@ function json(method: string, body: unknown): RequestInit {
   return { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
 }
 
+export type ImportOptions = { replaceCsv?: boolean; ai?: boolean; account?: string; bank?: string };
+
+function importBody(file: File, options: ImportOptions): FormData {
+  const body = new FormData();
+  body.append("file", file);
+  if (options.replaceCsv) body.append("replaceCsv", "1");
+  if (options.ai) body.append("ai", "1");
+  if (options.account) body.append("account", options.account);
+  if (options.bank) body.append("bank", options.bank);
+  return body;
+}
+
 export const api = {
   meta: () => request<Meta>(`/api/meta?${query()}`),
   stats: (params: TxQuery) => request<Stats>(`/api/stats?${query(params)}`),
@@ -98,18 +111,10 @@ export const api = {
     request<{ removed: number; accounts: Account[] }>(`/api/accounts/${id}`, { method: "DELETE" }),
   saveAmountThresholds: (thresholds: number[]) =>
     request<{ thresholds: number[] }>("/api/settings/amount-buckets", json("PUT", { thresholds })),
-  importFile: async (
-    file: File,
-    options: { replaceCsv?: boolean; ai?: boolean; account?: string; bank?: string },
-  ) => {
-    const body = new FormData();
-    body.append("file", file);
-    if (options.replaceCsv) body.append("replaceCsv", "1");
-    if (options.ai) body.append("ai", "1");
-    if (options.account) body.append("account", options.account);
-    if (options.bank) body.append("bank", options.bank);
-    return request<ImportResult>("/api/import", { method: "POST", body });
-  },
+  previewImport: (file: File, options: ImportOptions) =>
+    request<ImportPreview>("/api/import/preview", { method: "POST", body: importBody(file, options) }),
+  importFile: (file: File, options: ImportOptions) =>
+    request<ImportResult>("/api/import", { method: "POST", body: importBody(file, options) }),
   importDemo: (options: { uncategorized?: boolean } = {}) =>
     request<DemoResult>("/api/import/demo", json("POST", options)),
   clear: (all = false) => request<Ok>(`/api/data${all ? "?all=1" : ""}`, { method: "DELETE" }),

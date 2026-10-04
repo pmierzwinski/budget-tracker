@@ -25,7 +25,7 @@ copyFileSync(sourceDb, join(scratch, "data", "wydatki.db"));
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 
-const server = spawn(process.execPath, [join(root, "server", "index.ts")], {
+const server = spawn(process.execPath, [join(root, "src", "modules", "app", "main.ts")], {
   env: { ...process.env, PORT: String(port), WYDATKI_ROOT: scratch, WYDATKI_NO_BROWSER: "1", HOSTED: "" },
   stdio: ["ignore", "ignore", "pipe"],
 });
@@ -144,7 +144,7 @@ async function run() {
   await get("bank-status", "/bank/status");
   await get("evaluations", "/ai/evaluations");
 
-  const csv = readFileSync(join(root, "server", "fixtures", "pko-sample.csv"));
+  const csv = readFileSync(join(root, "src", "modules", "importer", "fixtures", "pko-sample.csv"));
   const importCsv = (name, extra = {}) => {
     const form = new FormData();
     form.append("file", new Blob([csv]), "pko.csv");

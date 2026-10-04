@@ -1,4 +1,4 @@
-import { DEFAULT_CATEGORY, merchantPattern } from "../../shared/domain.ts";
+import { DEFAULT_CATEGORY, merchantPattern } from "../modules/shared/domain.ts";
 import { api } from "../api";
 import { useApp } from "../app/AppContext";
 import type { CategoryChangeOptions, CategoryScope } from "../components/CategorySelect";

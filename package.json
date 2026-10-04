@@ -5,11 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently -k -n api,web -c cyan,magenta \"npm:dev:server\" \"npm:dev:client\"",
-    "dev:server": "node --watch --watch-path=server --watch-path=shared server/index.ts",
+    "dev:server": "node --watch --watch-path=src/modules src/modules/app/main.ts",
     "dev:client": "vite",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.app.json",
     "build": "npm run typecheck && vite build",
-    "start": "node server/index.ts",
+    "start": "node src/modules/app/main.ts",
     "package:win": "node scripts/package-win.mjs",
     "snapshot": "node scripts/api-snapshot.mjs"
   },
