@@ -1,5 +1,5 @@
 // Builds new transactions — shared by CSV import, Open Banking sync and demo data.
-import { createHash } from "node:crypto";
+import { sha256Hex } from "../shared/sha256.ts";
 import type { Transaction } from "../shared/types.ts";
 
 type Required = "id" | "date" | "bookingDate" | "amount" | "type" | "payee" | "title" | "description" | "accountId";
@@ -10,7 +10,7 @@ export type NewTransaction = Pick<Transaction, Required | "category" | "source" 
 export class TransactionFactory {
   /** Stable 24-char id from parts. Changing how ids are built duplicates history on re-import. */
   static hashId(parts: (string | number)[]): string {
-    return createHash("sha256").update(parts.join("|")).digest("hex").slice(0, 24);
+    return sha256Hex(parts.join("|")).slice(0, 24);
   }
 
   /** Today (UTC) shifted by `offsetDays`, as YYYY-MM-DD. */

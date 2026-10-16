@@ -1,15 +1,16 @@
-// How the app runs: paths, local / hosted / packaged mode, .env and public URLs.
+// How the server runs: paths, local / packaged (desktop) mode, .env and public URLs.
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { isSea } from "node:sea";
 import { fileURLToPath } from "node:url";
+import type { AppInfo } from "../shared/types.ts";
+import { DOWNLOAD_FILE, RELEASE_DOWNLOAD_URL, type AppEnvironment } from "./AppEnvironment.ts";
 
-export const DOWNLOAD_FILE = "Wydatki-Windows.zip";
-
-export class Runtime {
+export class Runtime implements AppEnvironment {
   readonly packaged: boolean;
+  /** Started for one person on this computer: the exe or `Wydatki.cmd` (127.0.0.1, opens the browser). */
+  readonly desktop: boolean;
   readonly appRoot: string;
-  readonly hosted: boolean;
   readonly port: number;
   readonly dist: string;
   readonly releaseDir: string;
@@ -20,13 +21,13 @@ export class Runtime {
 
   constructor(env: NodeJS.ProcessEnv = process.env) {
     this.packaged = Runtime.detectPackaged();
+    this.desktop = this.packaged || env.WYDATKI_DESKTOP === "1";
     this.appRoot = env.WYDATKI_ROOT
       ? resolve(env.WYDATKI_ROOT)
       : this.packaged
         ? dirname(process.execPath)
         : join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
     Runtime.loadEnvFile(join(this.appRoot, ".env"), env);
-    this.hosted = env.HOSTED === "1";
     this.port = Number(env.PORT || 8787);
     this.dist = join(this.appRoot, "dist");
     this.releaseDir = join(this.appRoot, "release");
@@ -37,9 +38,12 @@ export class Runtime {
     this.apiUrl = (env.PUBLIC_URL || `http://localhost:${this.port}`).replace(/\/$/, "");
   }
 
-  /** Server-side secrets from .env — ignored in hosted mode, where every visitor brings their own. */
   env(key: string): string {
-    return this.hosted ? "" : process.env[key] || "";
+    return process.env[key] || "";
+  }
+
+  appInfo(): AppInfo {
+    return { mode: this.desktop ? "desktop" : "local", packaged: this.packaged, downloadUrl: this.downloadUrl() };
   }
 
   /** The frontend that made the request (localhost on any port, or PUBLIC_URL); falls back to publicUrl. */
@@ -48,10 +52,10 @@ export class Runtime {
     return allowed ? origin.replace(/\/$/, "") : this.publicUrl;
   }
 
+  /** DOWNLOAD_URL, a local build or the GitHub release. The frontend shows it only in the showcase mode. */
   downloadUrl(): string {
-    if (this.packaged) return "";
     if (process.env.DOWNLOAD_URL) return process.env.DOWNLOAD_URL;
-    return existsSync(join(this.releaseDir, DOWNLOAD_FILE)) ? `/download/${DOWNLOAD_FILE}` : "";
+    return existsSync(join(this.releaseDir, DOWNLOAD_FILE)) ? `/download/${DOWNLOAD_FILE}` : RELEASE_DOWNLOAD_URL;
   }
 
   private static detectPackaged(): boolean {

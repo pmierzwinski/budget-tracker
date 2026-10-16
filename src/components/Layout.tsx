@@ -1,14 +1,18 @@
 import type { ReactNode } from "react";
 import { useApp } from "../app/AppContext";
+import { isShowcase } from "../app/showcase";
 import { NAV_GROUPS, type Page } from "../app/navigation";
 import { AccountSwitcher } from "./AccountSwitcher";
 import { DownloadButton } from "./DownloadButton";
 import { Icon } from "./Icon";
 import { NotificationCenter } from "./NotificationCenter";
+import { ShutdownButton } from "./ShutdownButton";
+import { FirstVisitWelcome } from "./WelcomeDialog";
 
 export function Layout({ page, children }: { page: Page; children: ReactNode }) {
   const { meta, navigate } = useApp();
   const { app } = meta;
+  const showcase = isShowcase(app);
   return (
     <div className="shell">
       <aside className="sidebar">
@@ -43,23 +47,27 @@ export function Layout({ page, children }: { page: Page; children: ReactNode }) 
           ))}
         </nav>
         <div className="sidebar-foot">
-          {app.hosted ? (
-            <p className="sidebar-note hosted-note">
-              <strong>Wersja online</strong>
-              Twoje dane są tymczasowe i widzisz je tylko Ty — znikną po dobie bez aktywności. Żeby trzymać je u siebie
-              i używać offline, pobierz aplikację.
+          {app.mode === "web" ? (
+            <p className="sidebar-note web-note">
+              <strong>Wersja w przeglądarce</strong>
+              Dane zapisują się tylko w tej przeglądarce i nigdzie nie są wysyłane. Wyczyszczenie danych przeglądarki je
+              usuwa — żeby trzymać je w pliku na dysku, pobierz aplikację.
             </p>
+          ) : app.mode === "android" ? (
+            <p className="sidebar-note">Dane zostają na tym telefonie i nigdzie nie są wysyłane.</p>
           ) : (
             <p className="sidebar-note">
               Dane zostają na tym komputerze. Logowanie do banku odbywa się wyłącznie na stronie banku.
             </p>
           )}
-          {app.downloadUrl ? <DownloadButton url={app.downloadUrl} quiet={!app.hosted} /> : null}
+          {showcase && app.downloadUrl ? <DownloadButton url={app.downloadUrl} /> : null}
+          {app.mode === "desktop" ? <ShutdownButton quiet /> : null}
         </div>
       </aside>
       <main className="content">
         <NotificationCenter />
         {children}
+        <FirstVisitWelcome key={showcase ? "showcase" : "plain"} />
       </main>
     </div>
   );

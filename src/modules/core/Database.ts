@@ -1,12 +1,20 @@
-// The database handle. `connection` resolves per call: the session database in hosted mode (AsyncLocalStorage),
-// otherwise the lazily opened data/wydatki.db. Never keep a reference to the underlying database.
-import { AsyncLocalStorage } from "node:async_hooks";
-import { mkdirSync } from "node:fs";
-import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
-import type { Runtime } from "./Runtime.ts";
-
+// The database handle, free of Node: the server opens data/wydatki.db with node:sqlite, the web version an
+// SQLite WASM database kept in the browser. Never keep a reference to the underlying connection.
 export type Row = Record<string, unknown>;
+
+export type SqlValue = null | number | bigint | string | Uint8Array;
+
+/** The part of node:sqlite's StatementSync the app uses; the web version implements it on sql.js. */
+export interface SqlStatement {
+  all(...params: SqlValue[]): Row[];
+  get(...params: SqlValue[]): Row | undefined;
+  run(...params: SqlValue[]): { changes: number | bigint };
+}
+
+export interface SqlConnection {
+  prepare(sql: string): SqlStatement;
+  exec(sql: string): void;
+}
 
 /** A one-off data migration, remembered under `key` in settings so it runs once per database. */
 export interface Migration {
@@ -28,40 +36,24 @@ export interface ModuleSchema {
 }
 
 export class Database {
-  readonly #scope = new AsyncLocalStorage<DatabaseSync>();
-  readonly #runtime: Runtime;
+  readonly #connect: () => SqlConnection;
   readonly #schemas: ModuleSchema[] = [];
-  #file: DatabaseSync | null = null;
+  #connection: SqlConnection | null = null;
+  #opening: SqlConnection | null = null;
 
-  constructor(runtime: Runtime) {
-    this.#runtime = runtime;
+  /** `connect` opens the database on first use; its schema is brought up to date right after. */
+  constructor(connect: () => SqlConnection) {
+    this.#connect = connect;
   }
 
   register(...schemas: ModuleSchema[]): void {
     this.#schemas.push(...schemas);
   }
 
-  get connection(): DatabaseSync {
-    const scoped = this.#scope.getStore();
-    if (scoped) return scoped;
-    if (this.#runtime.hosted) throw new Error("Sesja wygasła — odśwież stronę.");
-    if (!this.#file) {
-      const dataDir = join(this.#runtime.appRoot, "data");
-      mkdirSync(dataDir, { recursive: true });
-      this.#file = this.open(join(dataDir, "wydatki.db"));
-    }
-    return this.#file;
-  }
-
-  /** Opens a database (in memory by default) and brings its schema up to date. */
-  open(path = ":memory:"): DatabaseSync {
-    const database = new DatabaseSync(path);
-    this.#scope.run(database, () => this.#initialize());
-    return database;
-  }
-
-  within<T>(database: DatabaseSync, fn: () => T): T {
-    return this.#scope.run(database, fn);
+  get connection(): SqlConnection {
+    if (this.#opening) return this.#opening;
+    if (!this.#connection) this.#connection = this.#initialize(this.#connect());
+    return this.#connection;
   }
 
   transaction<T>(fn: () => T): T {
@@ -77,14 +69,19 @@ export class Database {
     }
   }
 
-  #initialize(): void {
-    const connection = this.connection;
-    for (const schema of this.#schemas) if (schema.tables) connection.exec(schema.tables);
-    for (const schema of this.#schemas) {
-      for (const column of schema.columns || []) this.#addColumn(column);
-      if (schema.afterColumns) connection.exec(schema.afterColumns);
+  #initialize(connection: SqlConnection): SqlConnection {
+    this.#opening = connection;
+    try {
+      for (const schema of this.#schemas) if (schema.tables) connection.exec(schema.tables);
+      for (const schema of this.#schemas) {
+        for (const column of schema.columns || []) this.#addColumn(column);
+        if (schema.afterColumns) connection.exec(schema.afterColumns);
+      }
+      for (const schema of this.#schemas) for (const migration of schema.migrations || []) this.#runOnce(migration);
+    } finally {
+      this.#opening = null;
     }
-    for (const schema of this.#schemas) for (const migration of schema.migrations || []) this.#runOnce(migration);
+    return connection;
   }
 
   #addColumn({ table, column, ddl }: ColumnMigration): void {

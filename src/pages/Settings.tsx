@@ -53,22 +53,27 @@ export function Settings({
 
       {tab === "ai" && <AiTab />}
       {tab === "accounts" && <AccountsTab />}
-      {tab === "bank" && appInfo.hosted ? (
+      {tab === "bank" && (appInfo.mode === "web" || appInfo.mode === "android") ? (
         <div className="empty-card">
-          <h2>Połączenie z bankiem działa tylko w aplikacji</h2>
+          <h2>
+            {appInfo.mode === "android"
+              ? "Połączenie z bankiem będzie w kolejnej wersji"
+              : "Połączenie z bankiem działa tylko w aplikacji"}
+          </h2>
           <p>
-            W wersji online nie łączymy się z bankami — dane logowania i historia konta nie powinny trafiać na cudzy
-            serwer. Pobierz aplikację, uruchom ją u siebie i połącz konto tutaj. Do tego czasu możesz wgrać plik CSV.
+            {appInfo.mode === "android"
+              ? "Na razie wgraj plik CSV wyeksportowany z bankowości — instrukcja dla Twojego banku jest w zakładce Import."
+              : "Wersja w przeglądarce nie ma serwera, a połączenie z bankiem go wymaga (klucze aplikacji, powrót ze strony banku). Pobierz aplikację, uruchom ją u siebie i połącz konto tutaj. Do tego czasu możesz wgrać plik CSV."}
           </p>
           <div className="row">
-            {appInfo.downloadUrl ? <DownloadButton url={appInfo.downloadUrl} /> : null}
+            {appInfo.mode === "web" && appInfo.downloadUrl ? <DownloadButton url={appInfo.downloadUrl} /> : null}
             <button type="button" className="ghost" onClick={() => navigate("import")}>
               Importuj CSV
             </button>
           </div>
         </div>
       ) : null}
-      {tab === "bank" && !appInfo.hosted && (
+      {tab === "bank" && (appInfo.mode === "local" || appInfo.mode === "desktop") && (
         <BankTab callback={bankCallback} onCallbackDone={onBankCallbackDone} />
       )}
       {tab === "charts" && <ChartsTab />}

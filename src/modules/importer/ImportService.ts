@@ -12,7 +12,7 @@ export const DEMO_ACCOUNT = "Konto testowe";
 export const DEMO_RAW_ACCOUNT = "Konto testowe bez kategorii";
 
 export type CsvImportRequest = {
-  file: Buffer;
+  file: Uint8Array;
   /** `auto`, `new` or an account id. */
   account: string;
   accountName?: string;

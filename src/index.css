@@ -1,5 +1,6 @@
 /* Design system — tokens first, then base elements, then components/pages in cascade order.
    Keep the import order: later files override earlier ones. Responsive rules come last. */
+@import "./styles/fonts.css";
 @import "./styles/tokens.css";
 @import "./styles/base.css";
 @import "./styles/shell.css";

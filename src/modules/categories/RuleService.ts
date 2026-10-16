@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { DEFAULT_CATEGORY } from "../shared/domain.ts";
 import type { CategoryRule } from "../shared/types.ts";
 import type { Database } from "../core/Database.ts";
@@ -42,7 +41,7 @@ export class RuleService {
       this.#rules.setCategory(existing.id, target);
       rule = { ...existing, category: target };
     } else {
-      rule = { id: randomUUID(), pattern: trimmed, category: target, createdAt: new Date().toISOString() };
+      rule = { id: crypto.randomUUID(), pattern: trimmed, category: target, createdAt: new Date().toISOString() };
       this.#rules.insert(rule);
     }
     return { rule, updated: this.#transactions.applyRule(rule.pattern, rule.category, Boolean(options.force)) };

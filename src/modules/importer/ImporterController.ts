@@ -1,8 +1,6 @@
-import type { Request, Router } from "express";
-import multer from "multer";
+import type { Request, RequestHandler, Router } from "express";
 import type { ImportPreview, ImportResult } from "../shared/types.ts";
 import { Controller, RequestReader } from "../core/Controller.ts";
-import type { SessionStore } from "../core/SessionStore.ts";
 import type { DataResetService } from "./DataResetService.ts";
 import type { CsvImportRequest, ImportService } from "./ImportService.ts";
 
@@ -11,22 +9,20 @@ const { text } = RequestReader;
 export class ImporterController extends Controller {
   readonly #imports: ImportService;
   readonly #reset: DataResetService;
-  readonly #sessions: SessionStore;
-  readonly #upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
+  readonly #upload: RequestHandler;
 
-  constructor(imports: ImportService, reset: DataResetService, sessions: SessionStore) {
+  /** `upload` puts the multipart `file` on `req.file` (multer on the server; the web version passes it directly). */
+  constructor(imports: ImportService, reset: DataResetService, upload: RequestHandler) {
     super();
     this.#imports = imports;
     this.#reset = reset;
-    this.#sessions = sessions;
+    this.#upload = upload;
   }
 
   register(router: Router): void {
-    // multer loses the async context, so the session database has to be re-entered after the upload.
     router.post(
       "/import/preview",
-      this.#upload.single("file"),
-      this.#sessions.reenter,
+      this.#upload,
       this.handle("Nie udało się odczytać pliku", (req) =>
         this.#imports.previewCsv(ImporterController.#csvRequest(req)) satisfies ImportPreview,
       ),
@@ -34,8 +30,7 @@ export class ImporterController extends Controller {
 
     router.post(
       "/import",
-      this.#upload.single("file"),
-      this.#sessions.reenter,
+      this.#upload,
       this.handle("Import nie powiódł się", async (req) =>
         (await this.#imports.importCsv(ImporterController.#csvRequest(req))) satisfies ImportResult,
       ),
@@ -63,7 +58,7 @@ export class ImporterController extends Controller {
     );
   }
 
-  static #csvRequest(req: Request): CsvImportRequest {
+  static #csvRequest(req: Request & { file?: { buffer: Uint8Array } }): CsvImportRequest {
     if (!req.file?.buffer) throw new Error("Wybierz plik CSV z bankowości.");
     return {
       file: req.file.buffer,

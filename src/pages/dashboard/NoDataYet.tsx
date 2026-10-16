@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "../../api";
 import { useApp } from "../../app/AppContext";
+import { isShowcase } from "../../app/showcase";
 import { DownloadButton } from "../../components/DownloadButton";
 import { Icon } from "../../components/Icon";
 import { errorMessage } from "../../format";
@@ -9,6 +10,7 @@ import { errorMessage } from "../../format";
 export function NoDataYet({ onError }: { onError: (message: string) => void }) {
   const { meta, navigate, reloadPage } = useApp();
   const { app } = meta;
+  const onDevice = app.mode === "web" || app.mode === "android";
   const [generating, setGenerating] = useState(false);
 
   async function generateDemo() {
@@ -24,10 +26,10 @@ export function NoDataYet({ onError }: { onError: (message: string) => void }) {
 
   return (
     <div className="empty-card">
-      <h2>{app.hosted ? "Wypróbuj aplikację" : "Brak zaimportowanych danych"}</h2>
+      <h2>{app.mode === "web" ? "Wypróbuj aplikację" : "Brak zaimportowanych danych"}</h2>
       <p>
-        {app.hosted
-          ? "Wygeneruj konto testowe z 6 miesiącami przykładowych płatności albo wgraj własny CSV z banku. Dane są tymczasowe i widzisz je tylko Ty."
+        {onDevice
+          ? "Wgraj CSV z bankowości albo wygeneruj konto testowe z 6 miesiącami przykładowych płatności. Dane zostają na tym urządzeniu i nigdzie nie są wysyłane."
           : "Wgraj CSV z bankowości albo połącz konto przez Open Banking — wykresy pojawią się od razu. Możesz też najpierw obejrzeć przykładowe dane."}
       </p>
       <div className="row">
@@ -38,9 +40,8 @@ export function NoDataYet({ onError }: { onError: (message: string) => void }) {
         <button type="button" className="ghost" onClick={() => navigate("import")}>
           Importuj historię
         </button>
-        {app.hosted ? (
-          app.downloadUrl ? <DownloadButton url={app.downloadUrl} quiet /> : null
-        ) : (
+        {isShowcase(app) && app.downloadUrl ? <DownloadButton url={app.downloadUrl} quiet /> : null}
+        {onDevice ? null : (
           <button type="button" className="ghost" onClick={() => navigate("settings", "bank")}>
             Połącz z bankiem
           </button>

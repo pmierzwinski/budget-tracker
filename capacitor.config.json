@@ -1,0 +1,8 @@
+{
+  "appId": "io.github.pmierzwinski.wydatki",
+  "appName": "Wydatki",
+  "webDir": "dist-android",
+  "android": {
+    "allowMixedContent": false
+  }
+}

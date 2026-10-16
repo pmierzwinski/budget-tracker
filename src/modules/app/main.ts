@@ -1,5 +1,5 @@
-// Entry point: starts the server. In the packaged exe it listens on 127.0.0.1, opens the browser and, when the
-// port is taken by another copy of Wydatki, just opens the browser (a foreign app → next port, up to 10).
+// Entry point: starts the server. On the desktop (exe or Wydatki.cmd) it listens on 127.0.0.1, opens the browser and,
+// when the port is taken by another copy of Wydatki, just opens the browser (a foreign app → next port, up to 10).
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { Application } from "./Application.ts";
@@ -19,21 +19,22 @@ class Server {
   }
 
   #listen(candidate: number, attempts: number): void {
-    const { packaged, hosted } = this.#container.runtime;
+    const { desktop } = this.#container.runtime;
     const server = createServer(this.#app.express);
-    server.listen({ port: candidate, host: packaged ? "127.0.0.1" : undefined }, () => {
+    server.listen({ port: candidate, host: desktop ? "127.0.0.1" : undefined }, () => {
       const url = `http://127.0.0.1:${candidate}`;
-      if (packaged) {
+      if (desktop) {
         console.log(`Wydatki działa: ${url}`);
-        console.log("Dane zapisują się w folderze „data” obok programu. Zamknij to okno, żeby wyłączyć aplikację.");
+        console.log("Dane zapisują się w folderze „data” obok programu.");
+        console.log("Żeby wyłączyć: „Zamknij aplikację” w menu po lewej albo zamknij to okno.");
         Server.#openBrowser(url);
       } else {
-        console.log(`Wydatki API: http://127.0.0.1:${candidate}${hosted ? " (tryb online, osobne dane dla każdej sesji)" : ""}`);
+        console.log(`Wydatki API: http://127.0.0.1:${candidate}`);
       }
     });
     server.on("error", async (error: NodeJS.ErrnoException) => {
       if (error.code !== "EADDRINUSE") throw error;
-      if (packaged && attempts > 0) {
+      if (desktop && attempts > 0) {
         if (await Server.#runningHere(candidate)) {
           console.log("Wydatki już działają — otwieram przeglądarkę.");
           Server.#openBrowser(`http://127.0.0.1:${candidate}`);

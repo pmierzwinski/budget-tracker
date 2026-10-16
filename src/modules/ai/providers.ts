@@ -155,6 +155,7 @@ export class AnthropicProvider extends BaseProvider {
         "content-type": "application/json",
         "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true",
       },
       body: JSON.stringify({
         model,
@@ -176,7 +177,7 @@ export class AnthropicProvider extends BaseProvider {
   async listModels(apiKey: string, baseUrl: string): Promise<AiModelOption[]> {
     const root = baseUrl || aiProvider("anthropic").defaultBaseUrl;
     const response = await fetch(`${root}/models?limit=100`, {
-      headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+      headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
     });
     const data = (await response.json()) as {
       error?: { message?: string };

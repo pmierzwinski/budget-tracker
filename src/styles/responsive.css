@@ -24,7 +24,8 @@
     padding: 0.45rem;
   }
 
-  .download-btn span {
+  .download-btn span,
+  .shutdown-btn span {
     display: none;
   }
 
@@ -151,6 +152,55 @@
 
   .tx-page > .tx-table {
     max-height: 75vh;
+  }
+
+  .tx-table table,
+  .tx-table tbody {
+    display: block;
+  }
+
+  .tx-table thead {
+    display: none;
+  }
+
+  .tx-table tbody tr {
+    display: grid;
+    grid-template-areas:
+      "who amount"
+      "who date"
+      "cat cat";
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.3rem 0.75rem;
+    padding: 0.7rem 0.9rem;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .tx-table tbody tr:has(.empty-row) {
+    display: block;
+  }
+
+  .tx-table tbody td {
+    display: block;
+    padding: 0;
+    border: 0;
+  }
+
+  .tx-table .tx-who {
+    grid-area: who;
+    max-width: none;
+  }
+
+  .tx-table tbody td.num {
+    grid-area: amount;
+  }
+
+  .tx-table .tx-date {
+    grid-area: date;
+    text-align: right;
+  }
+
+  .tx-table tbody td:nth-child(3) {
+    grid-area: cat;
   }
 
   .period-title {

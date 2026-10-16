@@ -1,4 +1,5 @@
 // The only way the frontend talks to the server. Every query carries the active account (set by AppContext).
+// The web and Android builds (`--mode web|android`) answer the same paths on the device (src/web/localServer.ts).
 import type {
   Account,
   AiCategorizeResult,
@@ -20,6 +21,8 @@ import type {
   TxQuery,
 } from "./types";
 
+const ON_DEVICE = import.meta.env.MODE === "web" || import.meta.env.MODE === "android";
+
 let activeAccount = "";
 
 /** Account every request is scoped to; "" = all accounts. */
@@ -34,7 +37,8 @@ export function getActiveAccount(): string {
 type Ok = { ok: true };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, init);
+  const response =
+    ON_DEVICE ? await (await import("./web/localServer")).localFetch(path, init) : await fetch(path, init);
   const data = (await response.json().catch(() => ({}))) as T & { error?: string };
   if (!response.ok) throw new Error(data.error || "Żądanie nie powiodło się");
   return data;
@@ -147,6 +151,7 @@ export const api = {
     request<Ok>("/api/bank/enablebanking/keys", json("POST", { appId, privateKey })),
   ebAspsps: () => request<{ aspsps: Institution[] }>("/api/bank/enablebanking/aspsps"),
   ebConnect: (aspsp: string) => request<{ link: string }>("/api/bank/enablebanking/connect", json("POST", { aspsp })),
+  shutdown: () => request<Ok>("/api/shutdown", { method: "POST" }),
   sync: (provider: "gocardless" | "enablebanking") =>
     request<SyncResult>(`/api/bank/${provider}/sync`, { method: "POST" }),
 };

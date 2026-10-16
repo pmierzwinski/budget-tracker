@@ -1,4 +1,4 @@
-// Open Banking (Enable Banking, GoCardless). In hosted mode the application answers 403 before these routes.
+// Open Banking (Enable Banking, GoCardless). Server only — the web version has no bank connection.
 import type { Router } from "express";
 import { Controller, RequestReader } from "../core/Controller.ts";
 import type { Runtime } from "../core/Runtime.ts";

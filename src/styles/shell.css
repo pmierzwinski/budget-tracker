@@ -122,17 +122,31 @@
   line-height: 1.45;
 }
 
-.hosted-note {
+.web-note {
   border: 1px solid var(--accent-soft-2);
   background: var(--accent-soft);
   color: var(--ink-2);
 }
 
-.hosted-note strong {
+.web-note strong {
   display: block;
   margin-bottom: 0.2rem;
   color: var(--accent);
   font-size: 0.8rem;
+}
+
+.shutdown-btn {
+  gap: 0.45rem;
+}
+
+.shutdown-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: var(--bg);
 }
 
 .download-btn {

@@ -1,6 +1,6 @@
-// Which AI provider, key, model and base URL to use: saved settings first, then .env (ignored online).
+// Which AI provider, key, model and base URL to use: saved settings first, then .env (none in the web version).
 import { aiProvider, isAiProvider, type AiProviderId, type AiPublic } from "../shared/ai.ts";
-import type { Runtime } from "../core/Runtime.ts";
+import type { AppEnvironment } from "../core/AppEnvironment.ts";
 import type { SettingsRepository } from "../settings/SettingsRepository.ts";
 
 export type AiConfig = { provider: AiProviderId; apiKey: string; model: string; baseUrl: string };
@@ -12,9 +12,9 @@ const RETIRED_GEMINI = /^gemini-2\.0/i;
 
 export class AiSettings {
   readonly #settings: SettingsRepository;
-  readonly #runtime: Runtime;
+  readonly #runtime: AppEnvironment;
 
-  constructor(settings: SettingsRepository, runtime: Runtime) {
+  constructor(settings: SettingsRepository, runtime: AppEnvironment) {
     this.#settings = settings;
     this.#runtime = runtime;
   }

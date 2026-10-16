@@ -134,10 +134,9 @@ export function ImportPage() {
         </div>
       </header>
 
-      {meta.app.hosted ? (
+      {meta.app.mode === "web" || meta.app.mode === "android" ? (
         <p className="banner ok">
-          Wersja online: plik trafia tylko do Twojej tymczasowej sesji (znika po dobie bez aktywności) i nikt inny go nie
-          widzi. Jeśli nie chcesz wysyłać wyciągu na serwer, pobierz aplikację — działa w całości na Twoim komputerze.
+          Plik jest czytany na tym urządzeniu i nigdzie nie jest wysyłany — płatności zapisują się tylko tutaj.
         </p>
       ) : null}
 

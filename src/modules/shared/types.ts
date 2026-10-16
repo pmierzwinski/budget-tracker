@@ -154,7 +154,13 @@ export type Account = {
 
 export type Bank = { id: string; name: string };
 
-export type AppInfo = { hosted: boolean; packaged: boolean; downloadUrl: string };
+/**
+ * Where the app runs: `local` = the server for development (npm run dev / start), `desktop` = the exe or
+ * Wydatki.cmd, `web` = the static web version (data in this browser), `android` = the Play app (data on the phone).
+ */
+export type AppMode = "local" | "desktop" | "web" | "android";
+
+export type AppInfo = { mode: AppMode; packaged: boolean; downloadUrl: string };
 
 export type DateBounds = { minDate: string; maxDate: string };
 

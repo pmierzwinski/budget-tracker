@@ -1,5 +1,4 @@
 // Cell-level parsing: encoding, separators, headers, amounts, dates and text snippets.
-import iconv from "iconv-lite";
 
 export class Cells {
   static normalizeHeader(value: string): string {
@@ -46,13 +45,13 @@ export class Cells {
   }
 
   /** UTF-16 by BOM, otherwise UTF-8 with a Windows-1250 fallback when the text looks garbled. */
-  static decode(buffer: Buffer): string {
+  static decode(buffer: Uint8Array): string {
     if (buffer[0] === 0xff && buffer[1] === 0xfe) {
-      return iconv.decode(buffer, "utf16-le");
+      return new TextDecoder("utf-16le").decode(buffer);
     }
-    const utf8 = buffer.toString("utf8").replace(/^\uFEFF/, "");
+    const utf8 = new TextDecoder("utf-8").decode(buffer).replace(/^\uFEFF/, "");
     if (!Cells.#looksLikeMojibake(utf8) && !utf8.includes("\0")) return utf8;
-    return iconv.decode(buffer, "win1250");
+    return new TextDecoder("windows-1250").decode(buffer);
   }
 
   static detectDelimiter(text: string): "," | ";" | "\t" {

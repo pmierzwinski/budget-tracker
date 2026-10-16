@@ -1,7 +1,6 @@
-import type { SQLInputValue } from "node:sqlite";
 import { DEFAULT_CATEGORY } from "../shared/domain.ts";
 import type { DateBounds, InsertResult, Transaction, TxFilters } from "../shared/types.ts";
-import { Repository, SqlWhere, type Row } from "../core/Repository.ts";
+import { Repository, SqlWhere, type Row, type SqlValue } from "../core/Repository.ts";
 import { TransactionFilter } from "./TransactionFilter.ts";
 
 const TEXT_MATCH = "(payee LIKE ? OR title LIKE ? OR description LIKE ? OR type LIKE ?)";
@@ -83,7 +82,7 @@ export class TransactionRepository extends Repository {
     return found;
   }
 
-  select(where: SqlWhere, suffix = "", ...extra: SQLInputValue[]): Transaction[] {
+  select(where: SqlWhere, suffix = "", ...extra: SqlValue[]): Transaction[] {
     return this.all(`SELECT * FROM transactions WHERE ${where}${suffix}`, ...where.params, ...extra).map(
       TransactionRepository.fromRow,
     );
@@ -215,7 +214,7 @@ export class TransactionRepository extends Repository {
     this.exec("DELETE FROM transactions; DELETE FROM bank_accounts;");
   }
 
-  #updateOne(sql: string, ...params: SQLInputValue[]): void {
+  #updateOne(sql: string, ...params: SqlValue[]): void {
     if (!this.run(sql, ...params)) throw new Error("Nie znaleziono transakcji");
   }
 }

@@ -61,6 +61,36 @@
   border-top: 1px solid var(--line-soft);
 }
 
+.welcome-list {
+  display: grid;
+  gap: 0.9rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.welcome-list li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.7rem;
+  align-items: start;
+}
+
+.welcome-list svg {
+  margin-top: 0.1rem;
+  color: var(--accent);
+}
+
+.welcome-list p {
+  margin: 0;
+  color: var(--ink-2);
+  line-height: 1.5;
+}
+
+.welcome-list strong {
+  color: var(--ink);
+}
+
 .field input,
 .field select {
   width: 100%;

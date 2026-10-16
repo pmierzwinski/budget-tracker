@@ -26,7 +26,7 @@ rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 
 const server = spawn(process.execPath, [join(root, "src", "modules", "app", "main.ts")], {
-  env: { ...process.env, PORT: String(port), WYDATKI_ROOT: scratch, WYDATKI_NO_BROWSER: "1", HOSTED: "" },
+  env: { ...process.env, PORT: String(port), WYDATKI_ROOT: scratch, WYDATKI_NO_BROWSER: "1" },
   stdio: ["ignore", "ignore", "pipe"],
 });
 let serverErrors = "";

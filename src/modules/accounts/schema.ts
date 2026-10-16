@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { Database, Migration, ModuleSchema } from "../core/Database.ts";
 
 const TABLES = `
@@ -28,7 +27,7 @@ class AccountsMigration implements Migration {
       (db.prepare("SELECT COUNT(*) AS n FROM transactions WHERE account_id = ''").get() as { n: number }).n,
     );
     if (!orphans) return;
-    const id = randomUUID();
+    const id = crypto.randomUUID();
     db.prepare("INSERT INTO accounts (id, name, bank, created_at) VALUES (?, ?, ?, ?)").run(
       id,
       "PKO BP",

@@ -16,7 +16,7 @@ export class CsvStatementParser {
   }
 
   /** `bank` forces a profile when the headers don't identify the bank; items have no account yet. */
-  parse(buffer: Buffer, options: { bank?: string; categorizer: Categorizer }): ParsedFile {
+  parse(buffer: Uint8Array, options: { bank?: string; categorizer: Categorizer }): ParsedFile {
     const text = Cells.decode(buffer);
     const parsed = Papa.parse<string[]>(text, {
       delimiter: Cells.detectDelimiter(text),

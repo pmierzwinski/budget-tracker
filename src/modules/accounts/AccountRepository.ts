@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { Account, AccountProvider } from "../shared/types.ts";
 import { Repository, type Row } from "../core/Repository.ts";
 
@@ -48,7 +47,7 @@ export class AccountRepository extends Repository {
 
   /** Stores the account as given (IBAN already normalized); returns its id. */
   insert(input: NewAccount): string {
-    const id = randomUUID();
+    const id = crypto.randomUUID();
     this.run(
       "INSERT INTO accounts (id, name, bank, iban, provider, external_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
       id,
