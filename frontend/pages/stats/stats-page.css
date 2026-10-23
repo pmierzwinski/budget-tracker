@@ -1,0 +1,41 @@
+/* ---------- Stats page: sections ---------- */
+
+.section-head {
+  margin-top: 0.75rem;
+}
+
+.section-head h2 {
+  font-size: 1.2rem;
+}
+
+.insight-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.insight-grid > * {
+  flex: 1 1 340px;
+  min-width: 0;
+}
+
+.insight-grid > .grow {
+  flex: 2 1 520px;
+}
+
+.insight-grid > .compare {
+  order: 1;
+}
+
+.insight-grid > .wide {
+  order: 2;
+  flex-basis: 100%;
+}
+
+@media (max-width: 760px) {
+  .insight-grid > *,
+  .insight-grid > .grow {
+    flex-basis: 100%;
+  }
+}

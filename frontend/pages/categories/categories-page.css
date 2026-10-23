@@ -1,0 +1,256 @@
+/* ---------- Kategorie page ---------- */
+
+.cat-table {
+  display: grid;
+}
+
+.cat-table-head,
+.cat-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 8.5rem 11.5rem;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.4rem 0.5rem;
+}
+
+.cat-table-head {
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.cat-line {
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.cat-line:hover {
+  background: var(--surface-2);
+}
+
+.cat-line-name {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+  font-weight: 500;
+}
+
+.cat-line-name > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cat-line-name input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 30px;
+  padding: 0.2rem 0.5rem;
+}
+
+.cat-default {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-style: normal;
+  text-align: right;
+}
+
+.rule-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 11rem) auto;
+  gap: 0.5rem;
+}
+
+.rules-list {
+  display: grid;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rules-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 0.875rem;
+}
+
+.rules-list li:last-child {
+  border-bottom: 0;
+}
+
+.empty-note {
+  margin: 0.75rem 0 0;
+  font-size: 0.85rem;
+}
+
+@media (max-width: 760px) {
+  .rule-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cat-table-head {
+    display: none;
+  }
+
+  .cat-line {
+    grid-template-columns: minmax(0, 1fr) 7rem;
+  }
+
+  .cat-default {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    text-align: left;
+  }
+}
+
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.kpi {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.kpi > span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.kpi strong {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi em {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+.limit-row.static {
+  cursor: default;
+}
+
+.limit-row.static:hover {
+  border-color: var(--line);
+}
+
+.limit-table {
+  display: grid;
+}
+
+.limit-table-head,
+.limit-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 8rem 9rem minmax(10rem, 14rem) 12.5rem;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.4rem 0.5rem;
+}
+
+.limit-table-head {
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.limit-line {
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.limit-line:last-child {
+  border-bottom: 0;
+}
+
+.limit-line:hover {
+  background: var(--surface-2);
+}
+
+.limit-line:not(.has-limit) .cat-line-name {
+  color: var(--ink-2);
+  font-weight: 400;
+}
+
+.limit-usage {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.limit-usage .limit-track {
+  flex: 1 1 auto;
+}
+
+.limit-usage .limit-pct {
+  min-width: 3.2rem;
+  font-size: 0.82rem;
+  text-align: right;
+}
+
+.limit-none {
+  font-size: 0.8rem;
+}
+
+@media (hover: hover) {
+  .cat-line .cat-actions {
+    opacity: 0;
+    transition: opacity 0.12s;
+  }
+
+  .cat-line:hover .cat-actions,
+  .cat-line:focus-within .cat-actions {
+    opacity: 1;
+  }
+}
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 1360px) and (min-width: 761px) {
+  .limit-table-head,
+  .limit-line {
+    grid-template-columns: minmax(0, 1fr) 7rem 8.5rem minmax(8rem, 12rem) 12.5rem;
+  }
+}
+
+@media (max-width: 760px) {
+  .limit-table-head {
+    display: none;
+  }
+
+  .limit-line {
+    grid-template-columns: minmax(0, 1fr) 7.5rem;
+    gap: 0.4rem 0.75rem;
+  }
+
+  .limit-line > .num {
+    text-align: right;
+  }
+
+  .limit-line > .cat-actions,
+  .limit-line > .cat-default {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+
+  .limit-usage,
+  .limit-none {
+    grid-column: 1 / -1;
+  }
+}

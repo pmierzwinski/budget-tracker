@@ -1,0 +1,15 @@
+/* ---------- Category tag ---------- */
+
+.swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  border-radius: 3px;
+}
+
+.rule-cat {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}

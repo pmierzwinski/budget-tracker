@@ -1,0 +1,101 @@
+/* ---------- Trend lines ---------- */
+
+.trend-chart {
+  display: grid;
+  gap: 1rem;
+}
+
+.trend-plot {
+  position: relative;
+  min-width: 0;
+}
+
+.trend-svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.trend-axis {
+  fill: var(--faint);
+  font-family: inherit;
+  font-size: 11px;
+}
+
+.trend-legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 1px 0.5rem;
+}
+
+.trend-tooltip {
+  position: absolute;
+  top: 12px;
+  z-index: 3;
+  min-width: 210px;
+  max-width: 280px;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  font-size: 0.82rem;
+  pointer-events: none;
+}
+
+.trend-tooltip-month {
+  margin: 0 0 0.35rem;
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.trend-tooltip-main,
+.trend-tooltip li {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+}
+
+.trend-tooltip-main {
+  margin-bottom: 0.35rem;
+}
+
+.trend-tooltip ul {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0.35rem 0 0;
+  border-top: 1px solid var(--line-soft);
+  list-style: none;
+}
+
+.trend-tooltip span {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 2px;
+}
+
+.trend-tooltip em {
+  margin-left: auto;
+  font-style: normal;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.trend-svg.pickable {
+  cursor: pointer;
+}
+
+.trend-picked {
+  pointer-events: none;
+}
+
+.trend-tooltip-hint {
+  margin: 0.4rem 0 0;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--line-soft);
+  color: var(--muted);
+  font-size: 0.72rem;
+}

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently -k -n api,web -c cyan,magenta \"npm:dev:server\" \"npm:dev:client\"",
-    "dev:server": "node --watch --watch-path=src/modules src/modules/app/main.ts",
+    "dev:server": "node --watch --watch-path=server --watch-path=shared server/main.ts",
     "dev:client": "vite",
     "dev:web": "vite --mode web",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.app.json",
@@ -13,28 +13,23 @@
     "build:web": "npm run typecheck && vite build --mode web",
     "build:android": "npm run typecheck && vite build --mode android && cap sync android",
     "android": "cap open android",
-    "start": "node src/modules/app/main.ts",
-    "package:win": "node scripts/package-win.mjs",
-    "snapshot": "node scripts/api-snapshot.mjs"
+    "start": "node server/main.ts",
+    "package:win": "node scripts/package-win.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.2",
     "@capacitor/core": "^8.5.2",
     "cors": "^2.8.5",
     "express": "^5.1.0",
-    "multer": "^2.0.2",
-    "papaparse": "^5.5.3",
-    "sql.js": "^1.14.2"
+    "papaparse": "^5.5.3"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.2",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",
-    "@types/multer": "^2.0.0",
     "@types/papaparse": "^5.3.16",
     "@types/react": "^19.1.13",
     "@types/react-dom": "^19.1.9",
-    "@types/sql.js": "^1.4.11",
     "@vitejs/plugin-react": "^5.0.2",
     "concurrently": "^9.2.1",
     "esbuild": "^0.28.2",

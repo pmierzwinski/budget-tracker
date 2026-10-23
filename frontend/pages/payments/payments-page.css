@@ -1,0 +1,217 @@
+/* ---------- Płatności page ---------- */
+
+.page.tx-page {
+  height: calc(100vh - var(--pad-y) - 2rem);
+  min-height: 560px;
+}
+
+.tx-page > * {
+  flex: 0 0 auto;
+}
+
+.tx-page > .tx-table {
+  flex: 1 1 auto;
+  min-height: 260px;
+}
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.65rem 0.75rem;
+}
+
+.search-field {
+  position: relative;
+  display: flex;
+  flex: 1 1 240px;
+  align-items: center;
+  min-width: 200px;
+}
+
+.search-field .icon {
+  position: absolute;
+  left: 0.7rem;
+  color: var(--faint);
+  pointer-events: none;
+}
+
+.search-field input {
+  width: 100%;
+  padding-left: 2.2rem;
+}
+
+.amount-range {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--faint);
+}
+
+.amount-range input {
+  width: 5.75rem;
+}
+
+.result-count {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.85rem;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.col-date {
+  width: 8.5rem;
+}
+
+.col-cat {
+  width: 16rem;
+}
+
+.tx-date {
+  color: var(--muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.tx-who {
+  max-width: 0;
+  width: 100%;
+}
+
+.tx-who strong {
+  display: block;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tx-desc {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.15rem 0.6rem;
+  margin-top: 0.1rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.tx-desc > span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty-row {
+  padding: 2.5rem 1rem;
+  text-align: center;
+}
+
+@media (hover: hover) {
+  .tx-table tbody tr .pay-note.empty,
+  .tx-table tbody tr .cat-merchant {
+    opacity: 0;
+    transition: opacity 0.12s;
+  }
+
+  .tx-table tbody tr:hover .pay-note.empty,
+  .tx-table tbody tr:focus-within .pay-note.empty,
+  .tx-table tbody tr:hover .cat-merchant,
+  .tx-table tbody tr:focus-within .cat-merchant {
+    opacity: 1;
+  }
+}
+
+@media (hover: hover) {
+  .tx-table tbody tr .exclude-toggle:not(.on) {
+    opacity: 0;
+    transition: opacity 0.12s;
+  }
+
+  .tx-table tbody tr:hover .exclude-toggle,
+  .tx-table tbody tr:focus-within .exclude-toggle {
+    opacity: 1;
+  }
+}
+
+tr.excluded .tx-who strong,
+tr.excluded .num {
+  color: var(--faint);
+}
+
+tr.excluded td.num {
+  text-decoration: line-through;
+  text-decoration-color: var(--line-strong);
+}
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 760px) {
+  .page.tx-page {
+    height: auto;
+    min-height: 0;
+  }
+
+  .tx-page > .tx-table {
+    max-height: 75vh;
+  }
+
+  .tx-table table,
+  .tx-table tbody {
+    display: block;
+  }
+
+  .tx-table thead {
+    display: none;
+  }
+
+  .tx-table tbody tr {
+    display: grid;
+    grid-template-areas:
+      "who amount"
+      "who date"
+      "cat cat";
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.3rem 0.75rem;
+    padding: 0.7rem 0.9rem;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .tx-table tbody tr:has(.empty-row) {
+    display: block;
+  }
+
+  .tx-table tbody td {
+    display: block;
+    padding: 0;
+    border: 0;
+  }
+
+  .tx-table .tx-who {
+    grid-area: who;
+    max-width: none;
+  }
+
+  .tx-table tbody td.num {
+    grid-area: amount;
+  }
+
+  .tx-table .tx-date {
+    grid-area: date;
+    text-align: right;
+  }
+
+  .tx-table tbody td:nth-child(3) {
+    grid-area: cat;
+  }
+
+  .result-count {
+    margin-left: 0;
+  }
+}

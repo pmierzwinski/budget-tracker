@@ -40,5 +40,5 @@ if not exist "dist\index.html" (
 )
 
 set WYDATKI_DESKTOP=1
-node src\modules\app\main.ts
+node server\main.ts
 if errorlevel 1 pause

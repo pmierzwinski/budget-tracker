@@ -1,0 +1,53 @@
+/* ---------- Hidden payments: exclude toggle ---------- */
+
+.exclude-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.08rem 0.45rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.74rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.exclude-toggle:hover,
+.exclude-toggle:focus-visible {
+  background: var(--surface-3);
+  color: var(--ink);
+}
+
+.exclude-toggle.compact {
+  font-size: 0.7rem;
+}
+
+.exclude-toggle.on {
+  background: var(--surface-3);
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+@media (hover: hover) {
+  .pay-row .exclude-toggle:not(.on) {
+    opacity: 0;
+    transition: opacity 0.12s;
+  }
+
+  .pay-row:hover .exclude-toggle,
+  .pay-row:focus-within .exclude-toggle {
+    opacity: 1;
+  }
+}
+
+.pay-row.excluded .who,
+.pay-row.excluded .pay-amount {
+  color: var(--faint);
+}
+
+.pay-row.excluded .pay-amount {
+  text-decoration: line-through;
+  text-decoration-color: var(--line-strong);
+}

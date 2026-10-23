@@ -1,0 +1,12 @@
+/* Global design system: fonts, tokens, base elements and the building blocks every page uses
+   (shell, buttons and form controls, cards, tables, dialogs). Module and page styles sit next to their
+   components and are imported there. Later files override earlier ones; responsive.css (app shell) stays last. */
+@import "./fonts.css";
+@import "./tokens.css";
+@import "./base.css";
+@import "./shell.css";
+@import "./controls.css";
+@import "./cards.css";
+@import "./tables.css";
+@import "./modal.css";
+@import "./responsive.css";
