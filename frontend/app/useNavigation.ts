@@ -1,20 +1,16 @@
 import { useCallback, useState } from "react";
-import { hasBankReturn } from "./bankCallback";
 import type { Navigate, Page, SettingsTab } from "./PageManager";
-
-function landing(): { page: Page; settingsTab: SettingsTab } {
-  if (hasBankReturn()) return { page: "settings", settingsTab: "bank" };
-  return { page: "dashboard", settingsTab: "ai" };
-}
 
 /**
  * Current screen of the app (no router). The settings tab lives here because
  * other pages deep-link into a tab (`navigate("settings", "ai")`) and pages
- * take no props. Returning from the bank only chooses the landing screen;
- * BankTab itself reads `?bank=` from the URL.
+ * take no props.
  */
 export function useNavigation() {
-  const [{ page, settingsTab }, setScreen] = useState(landing);
+  const [{ page, settingsTab }, setScreen] = useState<{ page: Page; settingsTab: SettingsTab }>({
+    page: "dashboard",
+    settingsTab: "ai",
+  });
   const [paymentsSearch, setPaymentsSearch] = useState("");
 
   const navigate = useCallback<Navigate>((next, tab) => {

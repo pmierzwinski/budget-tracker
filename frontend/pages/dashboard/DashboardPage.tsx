@@ -2,7 +2,7 @@ import { useState } from "react";
 import { bucketQuery } from "../../../shared/domain";
 import { getContext } from "../../app/AppContext";
 import { AiEvaluation } from "../../modules/ai";
-import { EmptyPeriod, PeriodBar, useComparison, usePeriod } from "../../modules/period";
+import { EmptyPeriod, PeriodBar, PeriodNotes, useComparison, usePeriod } from "../../modules/period";
 import { PaymentPanel, type PaySort, listTransactions, toFilters, useTransactionEdits, useTransactionList } from "../../modules/payments";
 import { computeStats } from "../../modules/statistics";
 import { Notices } from "../../ui/Notices";
@@ -21,7 +21,7 @@ function toggleCategory(current: string[], category: string, additive: boolean):
 }
 
 export function DashboardPage() {
-  const { database, account, navigate } = getContext();
+  const { database, account } = getContext();
   const { period, setPeriod, bounds } = usePeriod("month");
   const [sort, setSort] = useState<PaySort>("amount_desc");
   const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
@@ -69,6 +69,7 @@ export function DashboardPage() {
   const header = (
     <>
       <PeriodBar page="Przegląd" period={period} onChange={setPeriod} />
+      <PeriodNotes period={period} />
       <Notices error={shownError} onDismiss={() => setError("")} />
     </>
   );
@@ -117,7 +118,6 @@ export function DashboardPage() {
             <div className="hero-ai">
               <AiEvaluation
                 period={period}
-                onSetup={() => navigate("settings", "ai")}
                 filters={{
                   category: filtering ? categoryFilter.join(",") : undefined,
                   kind: activeBucket ? "expense" : undefined,

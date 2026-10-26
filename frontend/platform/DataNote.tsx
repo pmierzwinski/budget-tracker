@@ -13,6 +13,6 @@ export function DataNote() {
     );
   if (phone) return <p className="sidebar-note">Dane zostają na tym telefonie i nigdzie nie są wysyłane.</p>;
   return (
-    <p className="sidebar-note">Dane zostają na tym komputerze. Logowanie do banku odbywa się wyłącznie na stronie banku.</p>
+    <p className="sidebar-note">Dane zostają na tym komputerze. Na zewnątrz idą tylko przy użyciu AI, z Twoim kluczem.</p>
   );
 }

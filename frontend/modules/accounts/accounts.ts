@@ -1,4 +1,4 @@
-// Accounts the payments belong to: list with counts, edits, matching a CSV import and linking bank accounts.
+// Accounts the payments belong to: list with counts, edits and matching a CSV import.
 import type { Store, StoredAccount } from "../../../shared/store";
 import type { Account, AccountProvider } from "../../../shared/types";
 
@@ -105,22 +105,3 @@ export function resolveImport(draft: Store, requested: string, file: ImportFile)
   return draft.accounts.find((row) => row.id === account.id)!;
 }
 
-/** Finds (or creates) the local account for a bank-provider account and links it. */
-export function upsertLinked(
-  draft: Store,
-  provider: Exclude<AccountProvider, "">,
-  externalId: string,
-  input: { bank: string; iban: string; label?: string },
-): StoredAccount {
-  const local =
-    findAccount(draft, { provider, externalId, iban: input.iban }) ||
-    createAccount(draft, {
-      name: `${input.bank}${input.label ? ` · ${input.label}` : ""}${input.iban ? ` ··${input.iban.slice(-4)}` : ""}`,
-      bank: input.bank,
-      iban: input.iban,
-    });
-  const iban = normalizeIban(input.iban || "");
-  const linked = { ...local, provider, externalId, iban: iban || local.iban };
-  draft.accounts = draft.accounts.map((row) => (row.id === local.id ? linked : row));
-  return linked;
-}

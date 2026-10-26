@@ -211,16 +211,12 @@ export function AiTab() {
             <p>
               <strong>{uncategorized}</strong> {plural(uncategorized, "płatność", "płatności", "płatności")} w Inne
             </p>
-            <button
-              className="primary"
-              type="button"
-              disabled={busy || !uncategorized || !hasAiKey}
-              title={hasAiKey ? undefined : "Najpierw zapisz klucz"}
-              onClick={() => void categorize()}
-            >
-              <Icon name="sparkle" size={16} />
-              {busy ? "Kategoryzuję…" : "Skategoryzuj przez AI"}
-            </button>
+            {hasAiKey ? (
+              <button className="primary" type="button" disabled={busy || !uncategorized} onClick={() => void categorize()}>
+                <Icon name="sparkle" size={16} />
+                {busy ? "Kategoryzuję…" : "Skategoryzuj przez AI"}
+              </button>
+            ) : null}
           </div>
         </article>
       </div>

@@ -59,7 +59,7 @@ server/
     ai/            ai.ts, evaluations.ts (+ rowToEvaluation), routes.ts (/ai/*), index.ts
     importer/      csv/ (unchanged inside), demo.ts, importFile.ts (logic from the POST /import route), data.ts (clearData),
                    routes.ts (/import, /import/demo, /recategorize, DELETE /data), index.ts
-    banking/       provider.ts (BankProvider), enablebanking.ts, gocardless.ts, http.ts, routes.ts (/bank/*), index.ts
+    banking/       provider.ts (BankProvider), enablebanking.ts, http.ts, routes.ts (/bank/*), index.ts
     meta/          routes.ts (GET /meta: composes the other modules)
 ```
 `server/db/` and `server/routes/` go away completely. `db/rows.ts` is split between the modules.

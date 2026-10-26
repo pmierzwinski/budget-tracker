@@ -43,7 +43,12 @@ export class Runtime {
   }
 
   appInfo(): AppInfo {
-    return { mode: this.desktop ? "desktop" : "local", packaged: this.packaged, downloadUrl: this.downloadUrl() };
+    return {
+      mode: this.desktop ? "desktop" : "local",
+      packaged: this.packaged,
+      downloadUrl: this.downloadUrl(),
+      showDownload: process.env.SHOW_DOWNLOAD === "1",
+    };
   }
 
   /** The frontend that made the request (localhost on any port, or PUBLIC_URL); falls back to publicUrl. */
@@ -52,7 +57,7 @@ export class Runtime {
     return allowed ? origin.replace(/\/$/, "") : this.publicUrl;
   }
 
-  /** DOWNLOAD_URL, a local build or the GitHub release. The frontend shows it only in the showcase mode. */
+  /** DOWNLOAD_URL, a local build or the GitHub release. The frontend shows it when `showDownload` is on. */
   downloadUrl(): string {
     if (process.env.DOWNLOAD_URL) return process.env.DOWNLOAD_URL;
     return existsSync(join(this.releaseDir, DOWNLOAD_FILE)) ? `/download/${DOWNLOAD_FILE}` : RELEASE_DOWNLOAD_URL;

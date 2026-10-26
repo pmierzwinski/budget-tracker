@@ -5,7 +5,7 @@ import { Icon } from "../../ui/Icon";
 import { errorMessage } from "../../lib/format";
 import { importDemo } from "../../modules/import";
 
-/** Dashboard without any data: generate demo data, import or connect a bank. */
+/** Dashboard without any data: generate demo data or import a CSV. */
 export function NoDataYet({ onError }: { onError: (message: string) => void }) {
   const { database, meta, navigate, reloadPage } = getContext();
   const { onDevice, trial, showcase } = usePlatform();
@@ -29,7 +29,7 @@ export function NoDataYet({ onError }: { onError: (message: string) => void }) {
       <p>
         {onDevice
           ? "Wgraj CSV z bankowości albo wygeneruj konto testowe z 6 miesiącami przykładowych płatności. Dane zostają na tym urządzeniu i nigdzie nie są wysyłane."
-          : "Wgraj CSV z bankowości albo połącz konto przez Open Banking — wykresy pojawią się od razu. Możesz też najpierw obejrzeć przykładowe dane."}
+          : "Wgraj CSV z bankowości — wykresy pojawią się od razu. Możesz też najpierw obejrzeć przykładowe dane."}
       </p>
       <div className="row">
         <button type="button" className="primary" disabled={generating} onClick={() => void generateDemo()}>
@@ -40,11 +40,6 @@ export function NoDataYet({ onError }: { onError: (message: string) => void }) {
           Importuj historię
         </button>
         {showcase && downloadUrl ? <DownloadButton url={downloadUrl} quiet /> : null}
-        {onDevice ? null : (
-          <button type="button" className="ghost" onClick={() => navigate("settings", "bank")}>
-            Połącz z bankiem
-          </button>
-        )}
       </div>
     </div>
   );

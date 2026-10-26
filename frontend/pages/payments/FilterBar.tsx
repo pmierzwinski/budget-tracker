@@ -33,7 +33,7 @@ export function FilterBar({
   categories: string[];
   counts: { uncategorized: number; excluded: number };
   matched: number;
-  ai: { hasKey: boolean; busy: boolean; run: () => void; setup: () => void };
+  ai: { hasKey: boolean; busy: boolean; run: () => void };
 }) {
   const { q, kind, category, minAmount, maxAmount, excludedOnly } = filters;
   const uncategorizedOnly = category === DEFAULT_CATEGORY;
@@ -82,18 +82,11 @@ export function FilterBar({
           Ukryte <span className="count">{counts.excluded}</span>
         </button>
       ) : null}
-      {counts.uncategorized ? (
-        ai.hasKey ? (
-          <button type="button" className="primary" disabled={ai.busy} onClick={ai.run}>
-            <Icon name="sparkle" size={16} />
-            {ai.busy ? "AI kategoryzuje…" : "Skategoryzuj przez AI"}
-          </button>
-        ) : (
-          <button type="button" className="ghost ai-setup" title="Kategoryzacja AI wymaga klucza AI" onClick={ai.setup}>
-            <Icon name="sparkle" size={16} />
-            Ustaw klucz AI, żeby kategoryzować
-          </button>
-        )
+      {counts.uncategorized && ai.hasKey ? (
+        <button type="button" className="primary" disabled={ai.busy} onClick={ai.run}>
+          <Icon name="sparkle" size={16} />
+          {ai.busy ? "AI kategoryzuje…" : "Skategoryzuj przez AI"}
+        </button>
       ) : null}
       <span className="result-count">
         {matched} {matched === 1 ? "operacja" : "operacji"}

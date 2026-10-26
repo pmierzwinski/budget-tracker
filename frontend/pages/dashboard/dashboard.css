@@ -144,12 +144,6 @@
   line-clamp: 4;
 }
 
-.hero-ai .ai-off {
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.5rem 1rem;
-}
-
 .hero-chart {
   min-width: 0;
   padding: 1.1rem 1.25rem 1.2rem;

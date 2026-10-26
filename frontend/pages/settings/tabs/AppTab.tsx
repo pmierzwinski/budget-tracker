@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { getContext } from "../../../app/AppContext";
-import { DownloadButton, setShowcase, showcaseSwitch, ShutdownButton, usePlatform, WelcomeDialog } from "../../../platform";
+import { DownloadButton, ShutdownButton, usePlatform, WelcomeDialog } from "../../../platform";
 import { ConfirmDialog } from "../../../ui/ConfirmDialog";
 import { Notices } from "../../../ui/Notices";
 import { useAction } from "../../../lib/useAction";
@@ -10,7 +10,6 @@ export function AppTab() {
   const { database, meta, chooseAccount, reloadPage } = getContext();
   const { downloadUrl } = meta.app;
   const features = usePlatform();
-  const [showcase, setShowcaseState] = useState(showcaseSwitch);
   const [dataInfo, setDataInfo] = useState(false);
   const { busy, message, error, setMessage, run } = useAction();
   const [asking, setAsking] = useState(false);
@@ -23,12 +22,6 @@ export function AppTab() {
       setAsking(false);
       setMessage("Aplikacja jest pusta. Zostały tylko wbudowane kategorie.");
     }, "Nie udało się zresetować aplikacji");
-  }
-
-  function toggleShowcase(on: boolean) {
-    setShowcase(on);
-    setShowcaseState(on);
-    reloadPage();
   }
 
   return (
@@ -61,23 +54,6 @@ export function AppTab() {
         </div>
       </article>
     ) : null}
-    {features.showcaseSwitch ? (
-      <article className="card">
-        <div className="card-head">
-          <div>
-            <h2>Tryb pokazowy</h2>
-            <p className="card-sub">Podgląd tego, co widzi odwiedzający wersję w przeglądarce</p>
-          </div>
-        </div>
-        <label className="check">
-          <input type="checkbox" checked={showcase} onChange={(e) => toggleShowcase(e.target.checked)} />
-          <span>
-            Pokazuj przycisk „Pobierz aplikację”
-            <small>jak w wersji w przeglądarce; zapamiętane tylko tutaj, po włączeniu okno powitalne pokaże się od nowa</small>
-          </span>
-        </label>
-      </article>
-    ) : null}
     {features.showcase && downloadUrl ? (
       <article className="card">
         <div className="card-head">
@@ -101,7 +77,7 @@ export function AppTab() {
         </div>
       </div>
       <p>
-        Usuwa płatności, konta, własne kategorie, reguły, limity, sesje banku i przedziały wykresów. Wracają wbudowane
+        Usuwa płatności, konta, własne kategorie, reguły, limity i przedziały wykresów. Wracają wbudowane
         kategorie (Spożywcze, Paliwo, Inne…), także te, które wcześniej usunąłeś. Klucz AI zostaje, jeśli go zapisałeś.
       </p>
       <Notices message={message} error={error} />

@@ -33,6 +33,7 @@ export function readStore(appRoot: string): Store {
       })),
       settings: Object.fromEntries(rows(db, "SELECT key, value FROM settings").map((row) => [text(row.key), text(row.value)])),
       evaluations: rows(db, "SELECT * FROM period_evaluations").map(evaluation),
+      notes: [],
     };
   } finally {
     db.close();

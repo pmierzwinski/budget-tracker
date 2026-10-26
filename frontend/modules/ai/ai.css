@@ -93,10 +93,6 @@
   font-size: 0.85rem;
 }
 
-.ai-off p {
-  font-size: 0.82rem;
-}
-
 .ai-strip {
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
@@ -179,14 +175,4 @@
 .ai-text .ai-sections p {
   line-height: 1.65;
   white-space: pre-wrap;
-}
-
-.ghost.ai-setup {
-  border-color: #ddd3f7;
-  color: var(--ai);
-}
-
-.ghost.ai-setup:hover:not(:disabled) {
-  background: var(--ai-soft);
-  color: var(--ai);
 }

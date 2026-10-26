@@ -1,6 +1,8 @@
 /* ---------- Period bar ---------- */
 
 .period-head {
+  position: relative;
+  z-index: 30;
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
@@ -11,7 +13,7 @@
 .period-head.sticky {
   position: sticky;
   top: 0;
-  z-index: 20;
+  z-index: 30;
   margin: calc(-1 * var(--pad-y)) calc(-1 * var(--pad-x)) 0;
   padding: var(--pad-y) var(--pad-x) 0.7rem;
   background: color-mix(in srgb, var(--bg) 92%, transparent);
@@ -200,6 +202,41 @@
   gap: 0.6rem;
 }
 
+.period-busy {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.7rem;
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.period-spinner {
+  width: 1.35rem;
+  height: 1.35rem;
+  border: 2px solid var(--line-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: period-spin 0.7s linear infinite;
+}
+
+@keyframes period-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .period-spinner {
+    animation: none;
+    border-top-color: var(--accent);
+  }
+}
+
 /* ---------- Responsive ---------- */
 
 @media (max-width: 760px) {
@@ -209,7 +246,7 @@
   }
 
   .period-head.sticky {
-    position: static;
+    position: relative;
     margin: 0;
     padding: 0;
     background: none;

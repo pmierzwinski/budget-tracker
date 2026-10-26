@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { getContext } from "../../app/AppContext";
 import { AiEvaluation } from "../../modules/ai";
-import { EmptyPeriod, PeriodBar, useComparison, usePeriod, describePeriod, type Granularity, type TimeBucket } from "../../modules/period";
+import { EmptyPeriod, PeriodBar, PeriodNotes, useComparison, usePeriod, describePeriod, type Granularity, type TimeBucket } from "../../modules/period";
 import { useAsync } from "../../lib/useAsync";
 import { toFilters, useTransactionEdits } from "../../modules/payments";
 import { errorMessage } from "../../lib/format";
@@ -27,7 +27,7 @@ import "./stats-page.css";
 const PERIOD_KEY = "__period";
 
 export function StatsPage() {
-  const { database, account, navigate } = getContext();
+  const { database, account } = getContext();
   const { period, setPeriod, bounds } = usePeriod("all");
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [showExcluded, setShowExcluded] = useState(false);
@@ -112,6 +112,7 @@ export function StatsPage() {
     return (
       <section className="page">
         {header}
+        <PeriodNotes period={period} />
         <EmptyPeriod title="Brak płatności w tym okresie" totalAll={data.totalAll} onPeriod={setPeriod} />
       </section>
     );
@@ -134,6 +135,7 @@ export function StatsPage() {
   return (
     <section className="page">
       {header}
+      <PeriodNotes period={period} />
       {shownError ? <p className="banner error">{shownError}</p> : null}
 
       <TrendCard
@@ -172,7 +174,7 @@ export function StatsPage() {
         />
       ) : null}
 
-      {bounds.minDate ? <AiEvaluation variant="strip" period={period} onSetup={() => navigate("settings", "ai")} /> : null}
+      {bounds.minDate ? <AiEvaluation variant="strip" period={period} /> : null}
 
       <LeftoverCard months={data.byMonth} />
 

@@ -2,12 +2,9 @@
 
 Lokalna aplikacja do analizy wydatków z kont w polskich bankach (PKO BP, mBank, ING, Santander, Pekao, Millennium, Alior, Revolut, Credit Agricole), dla kilku kont naraz.
 
-Aplikacja nie loguje się do bankowości hasłem. Dane trafiają do niej na dwa sposoby:
+Aplikacja nie loguje się do bankowości. Historię wgrywa się jako CSV wyeksportowany z banku.
 
-1. **Import CSV** z bankowości — działa od razu.
-2. **Open Banking** przez Enable Banking (albo GoCardless dla istniejących kont) — logujesz się na stronie banku, aplikacja pobiera historię.
-
-Dane trzymane są lokalnie w `data/wydatki.json` (stara `data/wydatki.db` jest czytana raz i zostaje jako kopia). Interfejs działa offline (czcionki i strona są w paczce). Internet jest potrzebny tylko do AI i połączenia z bankiem.
+Dane trzymane są lokalnie w `data/wydatki.json` (stara `data/wydatki.db` jest czytana raz i zostaje jako kopia). Interfejs działa offline (czcionki i strona są w paczce). Internet jest potrzebny tylko do AI, gdy podasz własny klucz.
 
 ## Uruchomienie bez konsoli
 
@@ -19,7 +16,7 @@ Aplikację wyłącza przycisk **Zamknij aplikację** w menu po lewej (albo zamkn
 
 ## Wersja w przeglądarce
 
-`npm run build:web` buduje do `dist-web/` statyczną stronę bez serwera (np. na GitHub Pages). Dane zapisują się tylko w przeglądarce (IndexedDB) i nigdzie nie są wysyłane. Jedyne połączenie z internetem to AI, gdy użytkownik sam poda klucz swojego dostawcy. Połączenia z bankiem w tej wersji nie ma. Podgląd: `npm run dev:web`.
+`npm run build:web` buduje do `dist-web/` statyczną stronę bez serwera (np. na GitHub Pages). Dane zapisują się tylko w przeglądarce (IndexedDB) i nigdzie nie są wysyłane. Jedyne połączenie z internetem to AI, gdy użytkownik sam poda klucz swojego dostawcy. Podgląd: `npm run dev:web`.
 
 ## Android (Google Play)
 

@@ -1,6 +1,7 @@
 // Data shapes shared by the server and the frontend.
 import type { AiPublic } from "./ai.ts";
 
+/** `gocardless` is only on payments imported before that connection was removed. */
 export type TransactionSource = "csv" | "gocardless" | "enablebanking" | "demo";
 
 export type Transaction = {
@@ -139,6 +140,15 @@ export type PeriodEvaluation = {
   createdAt: string;
 };
 
+/** A written summary of one date range (a month, or custom from–to). */
+export type PeriodNote = {
+  id: string;
+  from: string;
+  to: string;
+  text: string;
+  createdAt: string;
+};
+
 export type AccountProvider = "" | "gocardless" | "enablebanking";
 
 export type Account = {
@@ -160,7 +170,7 @@ export type Bank = { id: string; name: string };
  */
 export type AppMode = "local" | "desktop" | "web" | "android";
 
-export type AppInfo = { mode: AppMode; packaged: boolean; downloadUrl: string };
+export type AppInfo = { mode: AppMode; packaged: boolean; downloadUrl: string; showDownload: boolean };
 
 export type DateBounds = { minDate: string; maxDate: string };
 
@@ -177,37 +187,6 @@ export type Meta = DateBounds & {
   banks: Bank[];
   amountThresholds: number[];
   app: AppInfo;
-};
-
-export type Institution = { id: string; name: string; logo: string };
-
-/** What the server knows about the bank connection (keys, sessions); the frontend adds the linked accounts. */
-export type BankServerStatus = Omit<BankStatus, "accounts">;
-
-export type BankStatus = {
-  gocardless: {
-    hasSecrets: boolean;
-    requisitionId: string | null;
-    institutionId: string | null;
-    institutionName: string | null;
-  };
-  enablebanking: {
-    hasKeys: boolean;
-    appId: string;
-    redirectUrl: string;
-    sessions: { aspsp: string; validUntil: string; accounts: number }[];
-  };
-  accounts: Account[];
-};
-
-export type BankTransaction = Pick<
-  Transaction,
-  "id" | "date" | "bookingDate" | "amount" | "currency" | "type" | "payee" | "title" | "description" | "externalId"
->;
-
-/** Payments the server fetched from the bank, per bank account; the frontend links accounts and saves them. */
-export type BankFetch = {
-  accounts: { externalId: string; bank: string; iban: string; label: string; transactions: BankTransaction[] }[];
 };
 
 export type InsertResult = { imported: number; skipped: number; ids: string[] };
@@ -237,8 +216,6 @@ export type ImportPreview = DateBounds & {
 };
 
 export type DemoResult = InsertResult & DateBounds & { total: number; account: Account; accounts: Account[] };
-
-export type SyncResult = InsertResult & { accounts: number; total: number };
 
 export type TransactionsResult = DateBounds & {
   items: Transaction[];

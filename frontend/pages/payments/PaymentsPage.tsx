@@ -12,7 +12,7 @@ import { PaymentsTable } from "./PaymentsTable";
 import "./payments-page.css";
 
 export function PaymentsPage() {
-  const { database, env, account, meta, navigate, paymentsSearch, clearPaymentsSearch } = getContext();
+  const { database, env, account, meta, paymentsSearch, clearPaymentsSearch } = getContext();
   const { period, setPeriod } = usePeriod("all");
   const [filters, setFilters] = useState<PaymentFilters>(NO_FILTERS);
   const [sort, setSort] = useState<TxSort>("date_desc");
@@ -63,7 +63,7 @@ export function PaymentsPage() {
         categories={list.categories}
         counts={meta}
         matched={list.data?.matched || 0}
-        ai={{ hasKey: meta.hasAiKey, busy: ai.busy, run: () => void askAi(), setup: () => navigate("settings", "ai") }}
+        ai={{ hasKey: meta.hasAiKey, busy: ai.busy, run: () => void askAi() }}
       />
       <Notices error={ai.error || list.error} message={ai.message} />
       <PaymentsTable

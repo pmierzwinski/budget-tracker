@@ -1,4 +1,4 @@
-// The local server (Windows / `npm run dev`): the data file, the bank connection, shutdown and the built frontend.
+// The local server (Windows / `npm run dev`): the data file, shutdown and the built frontend.
 // All the app's logic runs in the browser; this only does what a browser cannot.
 // On the desktop (exe or Wydatki.cmd) it listens on 127.0.0.1 and opens the browser; when the port is taken by
 // another copy of Wydatki it just opens the browser (a foreign app → next port, up to 10).
@@ -9,7 +9,6 @@ import { join } from "node:path";
 import cors from "cors";
 import express from "express";
 import { DOWNLOAD_FILE } from "../shared/domain.ts";
-import { bankRoutes } from "./bank/routes.ts";
 import { Runtime } from "./Runtime.ts";
 import { readStore, writeStore } from "./store.ts";
 
@@ -43,8 +42,6 @@ app.put("/api/store", (req, res) => {
   writeStore(runtime.appRoot, store);
   res.json({ ok: true });
 });
-
-app.use("/api/bank", bankRoutes(runtime));
 
 if (runtime.desktop) {
   app.post("/api/shutdown", (_req, res) => {

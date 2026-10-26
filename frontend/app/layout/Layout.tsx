@@ -52,7 +52,7 @@ export function Layout({ children }: { children: ReactNode }) {
       <main className="content">
         <NotificationCenter />
         {children}
-        <FirstVisitWelcome key={showcase ? "showcase" : "plain"} />
+        <FirstVisitWelcome />
       </main>
     </div>
   );

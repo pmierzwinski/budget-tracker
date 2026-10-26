@@ -48,13 +48,11 @@ export function AiEvaluation({
   period,
   filters,
   disabled,
-  onSetup,
   variant = "panel",
 }: {
   period: Period;
   filters?: EvalFilters;
   disabled?: boolean;
-  onSetup?: () => void;
   variant?: "panel" | "strip";
 }) {
   const { database, env, account, meta } = getContext();
@@ -77,21 +75,7 @@ export function AiEvaluation({
     }
   }
 
-  if (!hasAiKey) {
-    return (
-      <div className={`ai ai-${variant} ai-off`}>
-        <Badge />
-        <p className="muted">Ocena okresu wymaga klucza AI.</p>
-        {onSetup ? (
-          <button type="button" className="ghost sm ai-ask" onClick={onSetup}>
-            <Icon name="settings" size={14} />
-            Ustaw klucz AI
-          </button>
-        ) : null}
-        {error ? <p className="banner error">{error}</p> : null}
-      </div>
-    );
-  }
+  if (!hasAiKey) return null;
 
   const canAsk = !busy && !disabled && Boolean(period.from && period.to);
 

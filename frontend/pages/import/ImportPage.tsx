@@ -147,22 +147,15 @@ export function ImportPage() {
           <FileDrop file={file} busy={busy} banks={banks} onFile={chooseFile} onError={setError} />
 
           <div className="drop-options">
-            <label className={hasAiKey ? "check" : "check disabled"}>
-              <input type="checkbox" checked={withAi} disabled={!hasAiKey} onChange={(e) => setUseAi(e.target.checked)} />
-              <span>
-                Skategoryzuj nowe płatności przez AI
-                {hasAiKey ? (
+            {hasAiKey ? (
+              <label className="check">
+                <input type="checkbox" checked={withAi} onChange={(e) => setUseAi(e.target.checked)} />
+                <span>
+                  Skategoryzuj nowe płatności przez AI
                   <small>od razu po imporcie, tylko to, co trafi do Inne</small>
-                ) : (
-                  <small>
-                    Wymaga klucza AI —{" "}
-                    <button type="button" className="link-btn" onClick={() => navigate("settings", "ai")}>
-                      ustaw klucz AI
-                    </button>
-                  </small>
-                )}
-              </span>
-            </label>
+                </span>
+              </label>
+            ) : null}
             <label className="check">
               <input type="checkbox" checked={replaceCsv} onChange={(e) => setReplaceCsv(e.target.checked)} />
               <span>

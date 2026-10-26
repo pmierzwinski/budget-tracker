@@ -95,6 +95,7 @@ const KEEP_ON_RESET = ["openai_api_key", "ai_api_key", "ai_provider", "ai_model"
 export function clearData(draft: Store, all: boolean): void {
   draft.transactions = [];
   draft.evaluations = [];
+  draft.notes = [];
   if (!all) return;
   draft.accounts = [];
   draft.rules = [];

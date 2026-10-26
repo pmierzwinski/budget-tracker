@@ -91,6 +91,48 @@
   color: var(--ink);
 }
 
+.setup-note {
+  margin: 0;
+  color: var(--ink-2);
+  line-height: 1.5;
+}
+
+.setup-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.setup-categories li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 32px;
+  padding: 0.15rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 0.85rem;
+}
+
+.setup-categories li.locked {
+  color: var(--muted);
+  background: transparent;
+}
+
+.setup-categories li.locked small {
+  font-size: 0.72rem;
+}
+
+.setup-categories .icon-btn {
+  width: 22px;
+  height: 22px;
+  margin-right: -0.35rem;
+}
+
 .field input,
 .field select {
   width: 100%;

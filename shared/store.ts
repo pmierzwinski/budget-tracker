@@ -1,5 +1,5 @@
 // The whole app, as data. No rules: the frontend reads this, decides, and writes it back.
-import type { AccountProvider, CategoryLimitSetting, CategoryRule, PeriodEvaluation, Transaction } from "./types.ts";
+import type { AccountProvider, CategoryLimitSetting, CategoryRule, PeriodEvaluation, PeriodNote, Transaction } from "./types.ts";
 
 /** Account row as stored. Payment counts and date ranges are computed by the app, not saved. */
 export type StoredAccount = {
@@ -22,6 +22,8 @@ export type Store = {
   /** Key/value: AI key and model, amount buckets, recurring overrides. */
   settings: Record<string, string>;
   evaluations: PeriodEvaluation[];
+  /** Written summaries. A month note uses that month's first and last day; a custom one uses the chosen from–to. */
+  notes: PeriodNote[];
 };
 
 export function emptyStore(): Store {
@@ -34,5 +36,6 @@ export function emptyStore(): Store {
     limits: [],
     settings: {},
     evaluations: [],
+    notes: [],
   };
 }

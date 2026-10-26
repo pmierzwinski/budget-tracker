@@ -22,7 +22,7 @@ const groups = {
 
 export type Page = (typeof groups)[keyof typeof groups][number]["id"];
 
-export type SettingsTab = "ai" | "accounts" | "bank" | "charts" | "app";
+export type SettingsTab = "ai" | "accounts" | "charts" | "app";
 
 export type Navigate = (page: Page, tab?: SettingsTab) => void;
 

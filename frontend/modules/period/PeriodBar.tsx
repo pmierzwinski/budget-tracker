@@ -32,6 +32,10 @@ export function PeriodBar({
 }) {
   const { minDate, maxDate } = getContext().meta;
   const [open, setOpen] = useState<"month" | "custom" | null>(null);
+  const [draft, setDraft] = useState(period);
+  const [busy, setBusy] = useState(false);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
   const monthRef = useRef<HTMLDivElement>(null);
   const customRef = useRef<HTMLDivElement>(null);
   const close = () => setOpen(null);
@@ -47,22 +51,34 @@ export function PeriodBar({
     return () => window.removeEventListener("scroll", onScroll);
   }, [sticky]);
 
-  const info = describePeriod(period, minDate, maxDate);
-  const ready = Boolean(period.from && period.to);
+  const shown = draft;
+  const info = describePeriod(shown, minDate, maxDate);
+  const ready = Boolean(shown.from && shown.to);
   const latest = maxDate > today() ? maxDate : today();
-  const prev = ready && info.kind !== "all" ? stepPeriod(period, -1) : null;
-  const next = ready && info.kind !== "all" ? stepPeriod(period, 1) : null;
+  const prev = ready && info.kind !== "all" ? stepPeriod(shown, -1) : null;
+  const next = ready && info.kind !== "all" ? stepPeriod(shown, 1) : null;
   const canPrev = Boolean(prev && (!minDate || prev.to >= minDate));
   const canNext = Boolean(next && next.from <= latest);
   const thisMonth = monthRange(currentMonth());
-  const onThisMonth = period.from === thisMonth.from && period.to === thisMonth.to;
+  const onThisMonth = shown.from === thisMonth.from && shown.to === thisMonth.to;
   const monthMode = info.kind === "month";
-  const anchor = (period.to && period.to < latest ? period.to : latest).slice(0, 7);
+  const anchor = (shown.to && shown.to < latest ? shown.to : latest).slice(0, 7);
   const activePreset =
     RANGE_PRESETS.find((preset) => {
       const range = applyPreset(preset.id, minDate, maxDate);
-      return range.from === period.from && range.to === period.to;
+      return range.from === shown.from && range.to === shown.to;
     })?.id ?? (info.kind === "range" || info.kind === "months" ? "custom" : null);
+
+  // Paint the throbber first. The page rebuild (payments, charts) runs on the next frame, so the freeze
+  // happens with the indicator already on screen.
+  useEffect(() => {
+    if (period.from === draft.from && period.to === draft.to) {
+      if (busy) setBusy(false);
+      return;
+    }
+    const frame = requestAnimationFrame(() => onChangeRef.current(draft));
+    return () => cancelAnimationFrame(frame);
+  }, [draft.from, draft.to, period.from, period.to, busy]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -73,29 +89,36 @@ export function PeriodBar({
       const step = event.key === "ArrowLeft" ? (canPrev ? prev : null) : canNext ? next : null;
       if (!step) return;
       event.preventDefault();
-      onChange(step);
+      change(step);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   });
 
+  function change(nextPeriod: Period) {
+    if (nextPeriod.from === draft.from && nextPeriod.to === draft.to) return;
+    setDraft(nextPeriod);
+    setBusy(true);
+  }
+
   function pick(nextPeriod: Period) {
     setOpen(null);
-    onChange(nextPeriod);
+    change(nextPeriod);
   }
 
   function editRange(edge: "from" | "to", value: string) {
     if (!value) return;
-    const nextPeriod = { ...period, [edge]: value };
+    const nextPeriod = { ...shown, [edge]: value };
     if (nextPeriod.from && nextPeriod.to && nextPeriod.from > nextPeriod.to) {
       if (edge === "from") nextPeriod.to = value;
       else nextPeriod.from = value;
     }
-    onChange(nextPeriod);
+    change(nextPeriod);
   }
 
   return (
-    <header className={sticky ? `period-head sticky${stuck ? " stuck" : ""}` : "period-head"}>
+    <>
+    <header className={sticky ? `period-head sticky${stuck ? " stuck" : ""}` : "period-head"} aria-busy={busy}>
       <div className="period-main">
         <p className="eyebrow">{page}</p>
         <div className="period-nav">
@@ -105,7 +128,7 @@ export function PeriodBar({
             aria-label={monthMode ? "Poprzedni miesiąc" : "Poprzedni okres"}
             title={monthMode ? "Poprzedni miesiąc (←)" : "Poprzedni okres tej samej długości (←)"}
             disabled={!canPrev}
-            onClick={() => prev && onChange(prev)}
+            onClick={() => prev && change(prev)}
           >
             <Icon name="left" />
           </button>
@@ -123,8 +146,8 @@ export function PeriodBar({
             </button>
             {open === "month" ? (
               <MonthPicker
-                active={monthMode ? period.from.slice(0, 7) : ""}
-                initialYear={Number((monthMode ? period.from : anchor).slice(0, 4))}
+                active={monthMode ? shown.from.slice(0, 7) : ""}
+                initialYear={Number((monthMode ? shown.from : anchor).slice(0, 4))}
                 minMonth={minDate ? minDate.slice(0, 7) : currentMonth()}
                 maxMonth={latest.slice(0, 7)}
                 onPick={(month) => pick(monthRange(month))}
@@ -137,7 +160,7 @@ export function PeriodBar({
             aria-label={monthMode ? "Następny miesiąc" : "Następny okres"}
             title={monthMode ? "Następny miesiąc (→)" : "Następny okres tej samej długości (→)"}
             disabled={!canNext}
-            onClick={() => next && onChange(next)}
+            onClick={() => next && change(next)}
           >
             <Icon name="right" />
           </button>
@@ -177,16 +200,23 @@ export function PeriodBar({
             <div className="popover range-picker" role="dialog" aria-label="Własny zakres dat">
               <label className="field">
                 Od
-                <input type="date" value={period.from} onChange={(e) => editRange("from", e.target.value)} />
+                <input type="date" value={shown.from} onChange={(e) => editRange("from", e.target.value)} />
               </label>
               <label className="field">
                 Do
-                <input type="date" value={period.to} onChange={(e) => editRange("to", e.target.value)} />
+                <input type="date" value={shown.to} onChange={(e) => editRange("to", e.target.value)} />
               </label>
             </div>
           ) : null}
         </div>
       </div>
     </header>
+    {busy ? (
+      <div className="period-busy" role="status">
+        <span className="period-spinner" aria-hidden />
+        Liczę okres…
+      </div>
+    ) : null}
+    </>
   );
 }

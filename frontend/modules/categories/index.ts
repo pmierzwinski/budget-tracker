@@ -10,6 +10,7 @@ export {
   addCategory,
   categorizer,
   deleteCategory,
+  replaceWithOwnCategories,
   deleteRule,
   listCategories,
   listLimits,

@@ -62,6 +62,25 @@ export function deleteCategory(draft: Store, name: string): number {
   return moveCategory(draft, source, DEFAULT_CATEGORY, false);
 }
 
+/**
+ * Drops every category except "Inne" (payments, rules and limits follow `deleteCategory`)
+ * and stores the given names as the user's own set.
+ */
+export function replaceWithOwnCategories(draft: Store, names: string[]): void {
+  const cleaned: string[] = [];
+  for (const name of names) {
+    const trimmed = name.trim();
+    if (!trimmed) throw new Error("Podaj nazwę kategorii");
+    if (trimmed.length > 40) throw new Error("Nazwa może mieć najwyżej 40 znaków.");
+    if (trimmed.toLowerCase() === DEFAULT_CATEGORY.toLowerCase()) continue;
+    if (cleaned.some((item) => item.toLowerCase() === trimmed.toLowerCase())) continue;
+    cleaned.push(trimmed);
+  }
+  const current = listCategories(draft).filter((name) => name !== DEFAULT_CATEGORY);
+  for (const name of current) deleteCategory(draft, name);
+  for (const name of cleaned) addCategory(draft, name);
+}
+
 /** A retired built-in category is hidden, so the built-in regexes don't bring it back. */
 function moveCategory(draft: Store, source: string, target: string, keepLimit: boolean): number {
   let moved = 0;

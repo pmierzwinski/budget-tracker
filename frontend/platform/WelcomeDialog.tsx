@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { getContext } from "../app/AppContext";
-import { isShowcase, markWelcomeSeen, welcomeSeen } from "./showcase";
+import { CategorySetupDialog } from "./CategorySetupDialog";
+import { categoriesSetup, markCategoriesSetup, markWelcomeSeen, welcomeSeen } from "./showcase";
 import type { AppMode } from "../../shared/types";
 import { DownloadButton } from "./DownloadButton";
 import { Icon } from "../ui/Icon";
@@ -31,13 +32,6 @@ const STORED: Record<AppMode, ReactNode> = {
   ),
 };
 
-const BANK: Record<AppMode, ReactNode> = {
-  local: "Gdy połączysz konto: logujesz się na stronie banku, a historię pobiera Enable Banking albo GoCardless.",
-  desktop: "Gdy połączysz konto: logujesz się na stronie banku, a historię pobiera Enable Banking albo GoCardless.",
-  web: "W tej wersji połączenia z bankiem nie ma.",
-  android: "W tej wersji połączenia z bankiem jeszcze nie ma.",
-};
-
 const NOTHING_ELSE: Record<AppMode, string> = {
   local: "Nic więcej nie opuszcza komputera.",
   desktop: "Nic więcej nie opuszcza komputera.",
@@ -48,8 +42,8 @@ const NOTHING_ELSE: Record<AppMode, string> = {
 /** Where the data is stored and which actions send anything out. Shown once everywhere, reopened from Settings. */
 export function WelcomeDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { meta } = getContext();
-  const { mode, downloadUrl } = meta.app;
-  const download = isShowcase(meta.app) && downloadUrl;
+  const { mode, downloadUrl, showDownload } = meta.app;
+  const download = showDownload && downloadUrl;
 
   return (
     <Modal
@@ -88,12 +82,6 @@ export function WelcomeDialog({ open, onClose }: { open: boolean; onClose: () =>
           </p>
         </li>
         <li>
-          <Icon name="bank" size={18} />
-          <p>
-            <strong>Bank:</strong> {BANK[mode]}
-          </p>
-        </li>
-        <li>
           <Icon name="check" size={18} />
           <p>{NOTHING_ELSE[mode]}</p>
         </li>
@@ -102,16 +90,41 @@ export function WelcomeDialog({ open, onClose }: { open: boolean; onClose: () =>
   );
 }
 
-/** The welcome dialog on the first visit (per browser / device). */
+type FirstStep = "welcome" | "categories" | "done";
+
+function firstStep(): FirstStep {
+  if (!welcomeSeen()) return "welcome";
+  if (!categoriesSetup()) return "categories";
+  return "done";
+}
+
+/** Welcome dialog, then the starting-category choice. Each one shows once per browser. */
 export function FirstVisitWelcome() {
-  const [open, setOpen] = useState(() => !welcomeSeen());
-  return (
-    <WelcomeDialog
-      open={open}
-      onClose={() => {
-        markWelcomeSeen();
-        setOpen(false);
-      }}
-    />
-  );
+  const [step, setStep] = useState(firstStep);
+
+  if (step === "welcome") {
+    return (
+      <WelcomeDialog
+        open
+        onClose={() => {
+          markWelcomeSeen();
+          setStep(categoriesSetup() ? "done" : "categories");
+        }}
+      />
+    );
+  }
+
+  if (step === "categories") {
+    return (
+      <CategorySetupDialog
+        open
+        onDone={() => {
+          markCategoriesSetup();
+          setStep("done");
+        }}
+      />
+    );
+  }
+
+  return null;
 }
