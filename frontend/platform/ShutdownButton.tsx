@@ -1,8 +1,9 @@
 import { useState } from "react";
+import { getContext } from "../app/AppContext";
 import { errorMessage } from "../lib/format";
 import { Icon } from "../ui/Icon";
 
-/** Desktop only (exe / Wydatki.cmd): stops the local server, so the console window closes too. */
+/** Desktop only: stops the app (the window, or the console behind Wydatki.cmd). */
 export function ShutdownButton({ quiet }: { quiet?: boolean }) {
   const [state, setState] = useState<"idle" | "busy" | "closed">("idle");
   const [error, setError] = useState("");
@@ -25,7 +26,7 @@ export function ShutdownButton({ quiet }: { quiet?: boolean }) {
       <div className="shutdown-screen" role="status">
         <div className="empty-card">
           <h2>Aplikacja zamknięta</h2>
-          <p>Dane zostały w folderze „data” obok programu. Możesz zamknąć tę kartę.</p>
+          <p>Dane zostały w folderze {getContext().meta.app.dataDir || "„data”"}. Możesz zamknąć to okno.</p>
         </div>
       </div>
     );
@@ -37,7 +38,7 @@ export function ShutdownButton({ quiet }: { quiet?: boolean }) {
         type="button"
         className={quiet ? "ghost sm shutdown-btn" : "ghost shutdown-btn"}
         disabled={state === "busy"}
-        title="Wyłącza aplikację (serwer w oknie konsoli)"
+        title="Wyłącza aplikację"
         onClick={() => void shutdown()}
       >
         <Icon name="power" size={16} />

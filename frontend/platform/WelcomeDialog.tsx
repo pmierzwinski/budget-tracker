@@ -10,12 +10,12 @@ import { Modal } from "../ui/Modal";
 const STORED: Record<AppMode, ReactNode> = {
   local: (
     <>
-      W pliku <code>data/wydatki.db</code> w folderze aplikacji. Kopia zapasowa = skopiuj folder „data”.
+      W pliku <code>data/wydatki.json</code> w folderze aplikacji. Kopia zapasowa = skopiuj folder „data”.
     </>
   ),
   desktop: (
     <>
-      W pliku <code>data/wydatki.db</code> w folderze obok programu. Kopia zapasowa = skopiuj folder „data”.
+      W pliku <code>wydatki.json</code> w folderze danych aplikacji. Kopia zapasowa = skopiuj ten folder.
     </>
   ),
   web: (
@@ -42,8 +42,15 @@ const NOTHING_ELSE: Record<AppMode, string> = {
 /** Where the data is stored and which actions send anything out. Shown once everywhere, reopened from Settings. */
 export function WelcomeDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { meta } = getContext();
-  const { mode, downloadUrl, showDownload } = meta.app;
+  const { mode, downloadUrl, showDownload, dataDir } = meta.app;
   const download = showDownload && downloadUrl;
+  const where = dataDir ? (
+    <>
+      W pliku <code>wydatki.json</code> w folderze <code>{dataDir}</code>. Kopia zapasowa = skopiuj ten folder.
+    </>
+  ) : (
+    STORED[mode]
+  );
 
   return (
     <Modal
@@ -70,7 +77,7 @@ export function WelcomeDialog({ open, onClose }: { open: boolean; onClose: () =>
         <li>
           <Icon name="shield" size={18} />
           <p>
-            <strong>Zapisane:</strong> {STORED[mode]}
+            <strong>Zapisane:</strong> {where}
           </p>
         </li>
         <li>

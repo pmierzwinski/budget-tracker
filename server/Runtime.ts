@@ -1,23 +1,19 @@
-// How the server runs: paths, local / packaged (desktop) mode, .env and public URLs.
+// How the server runs: paths, local / windowed (desktop) mode and .env.
 import { existsSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
-import { isSea } from "node:sea";
 import { fileURLToPath } from "node:url";
 import type { AppInfo } from "../shared/types.ts";
-import { DOWNLOAD_FILE, RELEASE_DOWNLOAD_URL } from "../shared/domain.ts";
+
+const nodeRequire = createRequire(import.meta.url);
 
 export class Runtime {
   readonly packaged: boolean;
-  /** Started for one person on this computer: the exe or `Wydatki.cmd` (127.0.0.1, opens the browser). */
+  /** One person on this computer: the windowed app or `Wydatki.cmd` (127.0.0.1). */
   readonly desktop: boolean;
   readonly appRoot: string;
   readonly port: number;
   readonly dist: string;
-  readonly releaseDir: string;
-  /** Where the frontend lives: the API itself when dist/ is built, otherwise the Vite dev server. */
-  readonly publicUrl: string;
-  /** Where the API is reachable from the browser (bank redirects come back here). */
-  readonly apiUrl: string;
 
   constructor(env: NodeJS.ProcessEnv = process.env) {
     this.packaged = Runtime.detectPackaged();
@@ -29,13 +25,7 @@ export class Runtime {
         : join(dirname(fileURLToPath(import.meta.url)), "..");
     Runtime.loadEnvFile(join(this.appRoot, ".env"), env);
     this.port = Number(env.PORT || 8787);
-    this.dist = join(this.appRoot, "dist");
-    this.releaseDir = join(this.appRoot, "release");
-    this.publicUrl = (env.PUBLIC_URL || (existsSync(this.dist) ? `http://localhost:${this.port}` : "http://localhost:5173")).replace(
-      /\/$/,
-      "",
-    );
-    this.apiUrl = (env.PUBLIC_URL || `http://localhost:${this.port}`).replace(/\/$/, "");
+    this.dist = env.WYDATKI_DIST ? resolve(env.WYDATKI_DIST) : join(this.appRoot, "dist");
   }
 
   env(key: string): string {
@@ -46,26 +36,17 @@ export class Runtime {
     return {
       mode: this.desktop ? "desktop" : "local",
       packaged: this.packaged,
-      downloadUrl: this.downloadUrl(),
-      showDownload: process.env.SHOW_DOWNLOAD === "1",
+      downloadUrl: "",
+      showDownload: false,
+      dataDir: join(this.appRoot, "data"),
     };
   }
 
-  /** The frontend that made the request (localhost on any port, or PUBLIC_URL); falls back to publicUrl. */
-  frontendUrl(origin: string): string {
-    const allowed = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin) || origin === this.publicUrl;
-    return allowed ? origin.replace(/\/$/, "") : this.publicUrl;
-  }
-
-  /** DOWNLOAD_URL, a local build or the GitHub release. The frontend shows it when `showDownload` is on. */
-  downloadUrl(): string {
-    if (process.env.DOWNLOAD_URL) return process.env.DOWNLOAD_URL;
-    return existsSync(join(this.releaseDir, DOWNLOAD_FILE)) ? `/download/${DOWNLOAD_FILE}` : RELEASE_DOWNLOAD_URL;
-  }
-
   private static detectPackaged(): boolean {
+    if (process.versions.electron) return true;
     try {
-      return isSea();
+      const sea = nodeRequire("node:sea") as { isSea?: () => boolean };
+      return Boolean(sea.isSea?.());
     } catch {
       return false;
     }

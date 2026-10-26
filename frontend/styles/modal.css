@@ -91,6 +91,10 @@
   color: var(--ink);
 }
 
+.welcome-list code {
+  overflow-wrap: anywhere;
+}
+
 .setup-note {
   margin: 0;
   color: var(--ink-2);

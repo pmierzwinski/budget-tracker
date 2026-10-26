@@ -7,7 +7,7 @@ export type Environment = { app: AppInfo; env: Record<string, string> };
 export async function loadEnvironment(): Promise<Environment> {
   const mode = import.meta.env.MODE;
   if (mode === "web" || mode === "android") {
-    return { app: { mode, packaged: false, downloadUrl: RELEASE_DOWNLOAD_URL, showDownload: mode === "web" }, env: {} };
+    return { app: { mode, packaged: false, downloadUrl: RELEASE_DOWNLOAD_URL, showDownload: mode === "web", dataDir: "" }, env: {} };
   }
   const response = await fetch("/api/app");
   if (!response.ok) throw new Error("Nie udało się połączyć z aplikacją.");

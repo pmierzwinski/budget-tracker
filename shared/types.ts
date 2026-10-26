@@ -170,7 +170,14 @@ export type Bank = { id: string; name: string };
  */
 export type AppMode = "local" | "desktop" | "web" | "android";
 
-export type AppInfo = { mode: AppMode; packaged: boolean; downloadUrl: string; showDownload: boolean };
+export type AppInfo = {
+  mode: AppMode;
+  packaged: boolean;
+  downloadUrl: string;
+  showDownload: boolean;
+  /** Folder with wydatki.json. Empty in the browser and on Android (data stays inside the app). */
+  dataDir: string;
+};
 
 export type DateBounds = { minDate: string; maxDate: string };
 

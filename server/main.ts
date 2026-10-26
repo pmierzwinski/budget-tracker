@@ -1,14 +1,14 @@
 // The local server (Windows / `npm run dev`): the data file, shutdown and the built frontend.
 // All the app's logic runs in the browser; this only does what a browser cannot.
-// On the desktop (exe or Wydatki.cmd) it listens on 127.0.0.1 and opens the browser; when the port is taken by
-// another copy of Wydatki it just opens the browser (a foreign app → next port, up to 10).
+// The windowed app and Wydatki.cmd listen on 127.0.0.1. Wydatki.cmd opens the browser; the windowed app does not.
+// A taken port: our other copy (browser mode) just opens the browser; anything else, including the windowed app, tries the next port (up to 10).
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createServer } from "node:http";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import cors from "cors";
 import express from "express";
-import { DOWNLOAD_FILE } from "../shared/domain.ts";
 import { Runtime } from "./Runtime.ts";
 import { readStore, writeStore } from "./store.ts";
 
@@ -51,15 +51,6 @@ if (runtime.desktop) {
   });
 }
 
-app.get(`/download/${DOWNLOAD_FILE}`, (_req, res) => {
-  const file = join(runtime.releaseDir, DOWNLOAD_FILE);
-  if (!existsSync(file)) {
-    res.status(404).send("Paczka aplikacji nie jest jeszcze zbudowana (npm run package:win).");
-    return;
-  }
-  res.download(file, DOWNLOAD_FILE);
-});
-
 if (existsSync(runtime.dist)) {
   app.use(express.static(runtime.dist));
   app.get(/.*/, (_req, res) => {
@@ -67,36 +58,63 @@ if (existsSync(runtime.dist)) {
   });
 }
 
-listen(runtime.port, 10);
+export function start(): Promise<number> {
+  return listen(runtime.port, 10);
+}
 
-function listen(port: number, attempts: number): void {
-  const server = createServer(app);
-  server.listen({ port, host: runtime.desktop ? "127.0.0.1" : undefined }, () => {
-    const url = `http://127.0.0.1:${port}`;
-    if (!runtime.desktop) {
-      console.log(`Wydatki API: ${url}`);
-      return;
-    }
-    console.log(`Wydatki działa: ${url}`);
-    console.log("Dane zapisują się w folderze „data” obok programu.");
-    console.log("Żeby wyłączyć: „Zamknij aplikację” w menu po lewej albo zamknij to okno.");
-    openBrowser(url);
-  });
-  server.on("error", async (error: NodeJS.ErrnoException) => {
-    if (error.code !== "EADDRINUSE") throw error;
-    if (runtime.desktop && attempts > 0) {
-      if (await runningHere(port)) {
-        console.log("Wydatki już działają — otwieram przeglądarkę.");
-        openBrowser(`http://127.0.0.1:${port}`);
-        setTimeout(() => process.exit(0), 500);
-        return;
-      }
-      listen(port + 1, attempts - 1);
-      return;
-    }
-    console.error(`Port ${port} jest zajęty. Zamknij inną instancję albo uruchom z PORT=${port + 1}.`);
+if (startedDirectly()) {
+  void start().catch((error: unknown) => {
+    console.error(error);
     process.exit(1);
   });
+}
+
+function startedDirectly(): boolean {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  return pathToFileURL(resolve(entry)).href === import.meta.url;
+}
+
+function listen(port: number, attempts: number): Promise<number> {
+  return new Promise((resolveReady, reject) => {
+    const server = createServer(app);
+    server.listen({ port, host: runtime.desktop ? "127.0.0.1" : undefined }, () => {
+      const url = `http://127.0.0.1:${port}`;
+      if (!runtime.desktop) console.log(`Wydatki API: ${url}`);
+      else if (process.env.WYDATKI_NO_BROWSER === "1") console.log(`Wydatki: ${url}`);
+      else {
+        console.log(`Wydatki działa: ${url}`);
+        console.log("Dane zapisują się w folderze „data” obok programu.");
+        console.log("Żeby wyłączyć: „Zamknij aplikację” w menu po lewej albo zamknij to okno.");
+        openBrowser(url);
+      }
+      resolveReady(port);
+    });
+    server.on("error", (error: NodeJS.ErrnoException) => {
+      if (error.code !== "EADDRINUSE") {
+        reject(error);
+        return;
+      }
+      void portBusy(port, attempts, resolveReady, reject);
+    });
+  });
+}
+
+async function portBusy(port: number, attempts: number, resolveReady: (port: number) => void, reject: (error: unknown) => void): Promise<void> {
+  if (runtime.desktop && attempts > 0) {
+    if (process.env.WYDATKI_NO_BROWSER !== "1" && (await runningHere(port))) {
+      console.log("Wydatki już działają — otwieram przeglądarkę.");
+      openBrowser(`http://127.0.0.1:${port}`);
+      setTimeout(() => process.exit(0), 500);
+      return;
+    }
+    resolveReady(await listen(port + 1, attempts - 1));
+    return;
+  }
+  const error = new Error(`Port ${port} jest zajęty. Zamknij inną instancję albo uruchom z PORT=${port + 1}.`);
+  console.error(error.message);
+  reject(error);
+  process.exit(1);
 }
 
 function openBrowser(url: string): void {

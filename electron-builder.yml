@@ -1,0 +1,23 @@
+appId: io.github.pmierzwinski.wydatki
+productName: Wydatki
+executableName: Wydatki
+directories:
+  output: release
+files:
+  - desktop/main.cjs
+  - desktop/icon.png
+  - build/win/server.cjs
+  - dist/**/*
+asar: true
+npmRebuild: false
+win:
+  target: nsis
+  icon: desktop/icon.png
+  signExecutable: false
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  artifactName: Wydatki-Setup.${ext}
+  shortcutName: Wydatki
+  uninstallDisplayName: Wydatki

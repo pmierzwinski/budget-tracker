@@ -11,6 +11,7 @@ export default defineConfig(({ mode }) => ({
   build: { outDir: ON_DEVICE[mode] || "dist" },
   server: {
     port: 5173,
+    watch: { ignored: ["**/release/**", "**/dist/**", "**/dist-web/**", "**/dist-android/**", "**/build/**", "**/android/**"] },
     proxy:
       ON_DEVICE[mode]
         ? undefined
@@ -18,9 +19,6 @@ export default defineConfig(({ mode }) => ({
             "/api": {
               target: "http://127.0.0.1:8787",
               timeout: 180000,
-            },
-            "/download": {
-              target: "http://127.0.0.1:8787",
             },
           },
   },

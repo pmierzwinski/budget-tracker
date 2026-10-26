@@ -126,6 +126,6 @@ export function evaluationKey(view: {
   return parts.join("|");
 }
 
-/** The Windows build: served by the local server from release/, otherwise from GitHub Releases. */
-export const DOWNLOAD_FILE = "Wydatki-Windows.zip";
+/** The Windows installer, attached to a GitHub release. The web build links here. */
+export const DOWNLOAD_FILE = "Wydatki-Setup.exe";
 export const RELEASE_DOWNLOAD_URL = `https://github.com/pmierzwinski/budget-tracker/releases/latest/download/${DOWNLOAD_FILE}`;

@@ -19,7 +19,8 @@ npm run build    # typecheck + vite build → dist/
 npm run build:web  # wersja w przeglądarce (bez serwera, dane w IndexedDB) → dist-web/; podgląd: npm run dev:web
 npm run build:android  # to samo z mode "android" → dist-android/ + cap sync; potem npm run android (Android Studio, .aab)
 npm start        # sam serwer; jeśli istnieje dist/, serwuje też frontend
-npm run package:win  # release/Wydatki-Windows.zip (Wydatki.exe + dist/), tylko na Windows
+npm run package:win  # release/Wydatki-Setup.exe (okno Windows, instalator), tylko na Windows
+npm run package:android  # release/Wydatki.apk (plik na telefon), tylko na Windows; potrzebny Android SDK
 ```
 
 - Node 22+ (serwer czyta starą bazę `data/wydatki.db` przez wbudowany `node:sqlite`, stąd ostrzeżenie „ExperimentalWarning” w logach — to normalne).
@@ -27,7 +28,7 @@ npm run package:win  # release/Wydatki-Windows.zip (Wydatki.exe + dist/), tylko 
 - Brak testów automatycznych. Logika jest w zwykłych funkcjach na dokumencie (`frontend/modules/*/[a-z]*.ts`), więc da się ją sprawdzić skryptem na kopii danych (bundle esbuildem z `--loader:.css=empty`), a UI — w przeglądarce.
 - Serwer to zwykły `node server/main.ts` (wbudowane usuwanie typów w Node 22.18+; `dev:server` = `node --watch` tylko na `server/` i `shared/`, żeby zapis danych nie restartował serwera). Dlatego w TS obowiązuje `erasableSyntaxOnly` — bez `enum`, `namespace`, parameter properties.
 - Środowisko użytkownika: Windows + PowerShell (`curl` to alias `Invoke-WebRequest`; używaj `curl.exe` albo `Invoke-RestMethod`).
-- `.env` (opcjonalny, ładowany przez `server/Runtime.ts` z `appRoot`): `PORT`, `PUBLIC_URL`, `DOWNLOAD_URL`, `SHOW_DOWNLOAD=1` (przycisk „Pobierz aplikację” na hoście z tym serwerem), a dla AI: `AI_PROVIDER` (`openai` \| `gemini` \| `anthropic` \| `compatible`), `OPENAI_API_KEY` / `GEMINI_API_KEY` / `ANTHROPIC_API_KEY`, `AI_MODEL` / `OPENAI_MODEL`, `OPENAI_BASE_URL`. Klucze AI z `.env` front dostaje przez `GET /api/app` jako wartości domyślne; klucz wklejony w UI (Ustawienia → AI) trafia do `settings` w dokumencie i ma pierwszeństwo.
+- `.env` (opcjonalny, ładowany przez `server/Runtime.ts` z `appRoot`): `PORT`, a dla AI: `AI_PROVIDER` (`openai` \| `gemini` \| `anthropic` \| `compatible`), `OPENAI_API_KEY` / `GEMINI_API_KEY` / `ANTHROPIC_API_KEY`, `AI_MODEL` / `OPENAI_MODEL`, `OPENAI_BASE_URL`. Klucze AI z `.env` front dostaje przez `GET /api/app` jako wartości domyślne; klucz wklejony w UI (Ustawienia → AI) trafia do `settings` w dokumencie i ma pierwszeństwo.
 
 ## Stack
 
@@ -84,10 +85,9 @@ Front woła serwer tylko w dwóch miejscach: `db/FileDatabase.ts` (dane) i `plat
 | Endpoint | Co robi |
 | --- | --- |
 | `GET /api/health` | `{ ok, app: "wydatki" }` — exe sprawdza nim, czy port zajmuje nasza instancja |
-| `GET /api/app` | `{ app: { mode, packaged, downloadUrl, showDownload }, env }` — tryb (`local`/`desktop`), adres pobierania i klucze AI z `.env` |
+| `GET /api/app` | `{ app: { mode, packaged, downloadUrl, showDownload }, env }` — tryb (`local`/`desktop`) i klucze AI z `.env`. Na Windowsie `showDownload` jest zawsze fałszywe |
 | `GET/PUT /api/store` | cały dokument (`Store`); GET czyta `data/wydatki.json`, a gdy go nie ma — starą `data/wydatki.db` |
 | `POST /api/shutdown` | tylko desktop (exe / `Wydatki.cmd`): wyłącza serwer — przycisk „Zamknij aplikację” |
-| `GET /download/Wydatki-Windows.zip` | paczka z `release/` |
 
 ## Ekrany
 
@@ -147,11 +147,12 @@ Jasny, spokojny, „fintech/dashboard” — biała karta na szarym tle, granato
 - **`meta.app.mode`** (`AppMode`): `local` (npm run dev/start), `desktop` (exe / `Wydatki.cmd`), `web` (GitHub Pages), `android` (Play). Na komputerze podaje go serwer (`GET /api/app`), w web/Android `platform/environment.ts` z `import.meta.env.MODE`. Na funkcje zamienia go tylko `frontend/platform/platform.ts` (`platform(app)` / `usePlatform()` → `onDevice`, `shutdown`, `showcase`, `trial`, `phone`); komponenty pytają o funkcję, nie o tryb. Teksty zależne od platformy też są w `platform/` (`DataNote`, `WelcomeDialog`).
 - **Android** — Capacitor (`capacitor.config.json`, appId `io.github.pmierzwinski.wydatki` — po pierwszym wydaniu w Play nie da się go zmienić; `webDir: dist-android`), projekt Gradle w `android/` (wygenerowany przez `cap add android`; `assets/public` jest w jego `.gitignore`, wypełnia go `cap sync`). Ten sam kod co wersja w przeglądarce (IndexedDB w WebView), bez przycisku pobierania. ≤760px tabela Płatności zamienia się w karty (`pages/payments/payments-page.css`).
 - **Okno powitalne** (`WelcomeDialog`, wszędzie, raz — `localStorage` `wydatki.welcome-seen`; ponownie z Ustawienia → Aplikacja → „Gdzie są moje dane”): gdzie są zapisane dane (zależnie od `mode`) i które akcje coś wysyłają (AI z własnym kluczem). Zaraz potem, raz (`wydatki.categories-setup`), okno kategorii: zostaw wbudowane albo usuń wszystkie i wpisz własne („Inne” zostaje; płatności z usuniętych idą do „Inne”). Ponowne otwarcie z ustawień nie pyta o kategorie drugi raz.
-- **Przycisk „Pobierz aplikację”** (sidebar, Ustawienia → Aplikacja, pusty Przegląd, stopka okna powitalnego) — `app.showDownload`. W `web` zawsze, w `android` nigdy. Na serwerze (`local`/`desktop`, też host) włącza go `SHOW_DOWNLOAD=1` w `.env`; adres to `DOWNLOAD_URL`, lokalny zip z `release/` albo GitHub Releases.
-- **Exe (`npm run package:win`)** — `scripts/package-win.mjs`: vite build → esbuild `server/main.ts` do CJS (`import.meta.url` podmienione) → blob Node SEA → kopia `node.exe` jako `Wydatki.exe` + postject → `dist/` + `CZYTAJ.txt` → zip przez `tar.exe`. Wynik w `release/` (w `.gitignore`). `packaged` = `node:sea` `isSea()`; wtedy `appRoot` = folder exe (tam `data/`, `dist/`, `.env`), serwer słucha na `127.0.0.1`, otwiera przeglądarkę (`WYDATKI_NO_BROWSER=1` wyłącza — do testów), przy zajętym porcie sprawdza `/api/health` (`app: "wydatki"`): nasza instancja → tylko otwiera przeglądarkę, obca → kolejny port (do 10). Exe nie jest podpisane (SmartScreen) i ma ikonę Node.
-- **`Wydatki.cmd`** — dwuklik z zipa GitHuba (kod źródłowy). Sprawdza Node 22, przy pierwszym starcie robi `npm install` i `npm run build`, potem startuje `server/main.ts` z `WYDATKI_DESKTOP=1` (to samo zachowanie co exe: 127.0.0.1, przeglądarka, folder `data/` obok skryptu).
-- **Pobieranie** — `GET /download/Wydatki-Windows.zip` serwuje plik z `release/` (w `npm run dev` Vite proxy `/download` → serwer). `meta.app.downloadUrl` = `DOWNLOAD_URL`, lokalny zip albo GitHub Releases (`RELEASE_DOWNLOAD_URL` w `shared/domain.ts`, w wersji w przeglądarce zawsze ten). `DownloadButton` widać, gdy `showDownload` (wersja `web` albo `SHOW_DOWNLOAD=1`).
-- **Zamykanie (desktop)** — `usePlatform().shutdown` pokazuje `ShutdownButton` (sidebar + Ustawienia → Aplikacja) → `POST /api/shutdown` → `process.exit(0)`, okno konsoli znika, karta pokazuje „Aplikacja zamknięta”.
+- **Przycisk „Pobierz aplikację”** (sidebar, Ustawienia → Aplikacja, pusty Przegląd, stopka okna powitalnego) — `app.showDownload`. W `web` zawsze (adres to GitHub Releases, `RELEASE_DOWNLOAD_URL`), na Windowsie (`local`/`desktop`) i w `android` nigdy.
+- **Aplikacja Windows (`npm run package:win`)** — `scripts/package-win.mjs`: vite build → esbuild `server/main.ts` do CJS → Electron (`desktop/main.cjs`) otwiera własne okno na ten serwer (bez konsoli i bez przeglądarki) → instalator NSIS `release/Wydatki-Setup.exe`. Dane: `%APPDATA%\\Wydatki\\data\\wydatki.json` (`WYDATKI_ROOT`). `packaged` = Electron (albo dawny `node:sea`). Serwer słucha na `127.0.0.1`; drugie uruchomienie tylko przywraca okno. Port zajęty przez inną kopię: następny port (do 10). `Wydatki.cmd` nadal otwiera przeglądarkę (`WYDATKI_NO_BROWSER=1` to wyłącza). Instalator nie jest podpisany (SmartScreen).
+- **`Wydatki.cmd`** — dwuklik z zipa GitHuba (kod źródłowy). Sprawdza Node 22, przy pierwszym starcie robi `npm install` i `npm run build`, potem startuje `server/main.ts` z `WYDATKI_DESKTOP=1` (127.0.0.1, przeglądarka, folder `data/` obok skryptu). To nie jest okno instalacji — do tego służy `Wydatki-Setup.exe`.
+- **Pobieranie** — tylko wersja `web`. `downloadUrl` to `RELEASE_DOWNLOAD_URL` z `shared/domain.ts` (instalator `Wydatki-Setup.exe` na GitHubie). Windows tego adresu nie pokazuje.
+- **Android APK (`npm run package:android`)** — `build:android` + `gradlew assembleDebug`. Wynik `release/Wydatki.apk`: plik do skopiowania na telefon (instalacja spoza sklepu, podpis debug). Sklep Play nadal chce podpisany `.aab` z Android Studio.
+- **Zamykanie (desktop)** — `usePlatform().shutdown` pokazuje `ShutdownButton` (sidebar + Ustawienia → Aplikacja) → `POST /api/shutdown` → `process.exit(0)`. W aplikacji okienkowej znika całe okno; w `Wydatki.cmd` znika konsola. Zamknięcie okna aplikacji też ją wyłącza.
 
 ## Architektura kodu
 
@@ -166,7 +167,7 @@ Jasny, spokojny, „fintech/dashboard” — biała karta na szarym tle, granato
 - Pliki: `payments/transactions.ts` (filtry `toFilters`/`filterTransactions`, sortowanie, `listTransactions`, edycja płatności, `newTransaction`, `insertTransactions`), `categories/categories.ts` (kategorie, reguły, `categorizer`, `recategorizeAll`, limity, `periodMonthFactor`, `budgets`) + `builtinRules.ts`, `accounts/accounts.ts`, `statistics/stats.ts` (`computeStats`, `computeInsights` + płatności cykliczne, progi kwot), `import/` (`importer.ts`, `demo.ts`, `csv/`), `ai/ai.ts` + `providers.ts` (strategie dostawców z fabryką `AiProviderFactory`), `app/meta.ts` (`computeMeta`).
 - Kategoryzacja: `categorizer(store)` zwraca funkcję — reguły użytkownika → wbudowane regexy → „Przelewy” dla przelewów i wpływów → „Inne”; ukryte kategorie lądują w „Inne”. Buduj raz na partię.
 
-**`server/`** (tylko Windows / `npm run dev`) — `main.ts` (Express: trasy z tabeli API, `dist/`, nasłuch i przeglądarka w exe), `Runtime.ts` (appRoot, packaged/desktop, `.env`, porty i adresy: `publicUrl`, `apiUrl`, `frontendUrl()`, `downloadUrl()`), `store.ts` (plik danych).
+**`server/`** (tylko Windows / `npm run dev`) — `main.ts` (Express: trasy z tabeli API, `dist/`, nasłuch i przeglądarka w exe), `Runtime.ts` (appRoot, packaged/desktop, `.env`, port), `store.ts` (plik danych).
 
 **Front** — szczegóły w „Struktura frontu” niżej:
 - `app/AppContext.tsx` + `getContext()` — `database`, `env` (AI z `.env`), `meta` (liczone z dokumentu dla aktywnego konta: konta, banki, kategorie, limity, reguły, liczniki, klucz AI, progi, tryb aplikacji — **odświeża się samo po każdym `database.update`**), `account`/`chooseAccount`, `reloadPage()` (remount bieżącej strony), `currentPage` (`id`, `key`) / `navigate` / `settingsTab`, powiadomienia, `paymentsSearch`. Klik w powiadomienie obsługuje `NotificationCenter` (nawigacja + opcjonalne `paymentsSearch` na Płatnościach).
@@ -200,8 +201,8 @@ Wydatki.cmd       dwuklik z zipa GitHuba (Node 22, pierwsze uruchomienie buduje 
 index.html        wejście Vite → frontend/main.tsx
 shared/           typy i reguły wspólne dla frontu i serwera (types, store, domain, ai, dates, numbers, sha256)
 server/           serwer lokalny (Windows / npm run dev); tsconfig.json
-  main.ts         Express: /api/health, /api/app, /api/store, /api/shutdown, /download, dist/
-  Runtime.ts      appRoot, packaged/desktop, .env, porty i adresy
+  main.ts         Express: /api/health, /api/app, /api/store, /api/shutdown, dist/
+  Runtime.ts      appRoot, packaged/desktop, .env, port
   store.ts        data/wydatki.json (pierwszy odczyt ze starej data/wydatki.db)
 frontend/         React + cała logika; tsconfig.json rozszerza ../tsconfig.app.json (edytor ładuje tylko tsconfig.json)
   main.tsx        START: spis treści, globalne style, render <App />
@@ -225,8 +226,10 @@ frontend/         React + cała logika; tsconfig.json rozszerza ../tsconfig.app.
   styles/         globalny design system (fonts, tokens, base, shell, controls, cards, tables, modal, responsive)
   assets/fonts/   Inter woff2
 android/          projekt Capacitor (Gradle); capacitor.config.json w katalogu głównym
+desktop/          okno Windows (Electron): main.cjs, icon.png; konfiguracja w electron-builder.yml
 scripts/
-  package-win.mjs budowanie Wydatki.exe (Node SEA + postject) i zipa
+  package-win.mjs instalator Windows (Electron + NSIS) → release/Wydatki-Setup.exe
+  package-android.mjs APK do wgrania na telefon → release/Wydatki.apk
   fixtures/pko-sample.csv  przykładowy wyciąg PKO (sprawdzanie parsera i id)
 ```
 

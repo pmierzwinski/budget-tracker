@@ -45,10 +45,14 @@ export function AppTab() {
         <div className="card-head">
           <div>
             <h2>Zamknięcie aplikacji</h2>
-            <p className="card-sub">Wyłącza serwer w oknie konsoli</p>
+            <p className="card-sub">{meta.app.packaged ? "Zamyka okno aplikacji" : "Wyłącza serwer w oknie konsoli"}</p>
           </div>
         </div>
-        <p>Zamknięcie karty przeglądarki nie wyłącza aplikacji. Dane są zapisane na bieżąco w folderze „data”.</p>
+        <p>
+          {meta.app.packaged
+            ? "Dane są zapisane na bieżąco. Zamknięcie okna też wyłącza aplikację."
+            : "Zamknięcie karty przeglądarki nie wyłącza aplikacji. Dane są zapisane na bieżąco w folderze „data”."}
+        </p>
         <div className="row">
           <ShutdownButton />
         </div>
@@ -63,8 +67,8 @@ export function AppTab() {
           </div>
         </div>
         <p>
-          Rozpakuj zip i kliknij <strong>Wydatki.exe</strong> — bez instalacji i bez internetu. Dane leżą w folderze
-          „data” obok programu. Albo na GitHubie pobierz kod i kliknij <strong>Wydatki.cmd</strong> (potrzebny Node 22).
+          Zainstaluj <strong>Wydatki</strong> na Windows — własne okno, bez przeglądarki. Dane zostają na tym komputerze.
+          Albo pobierz kod i kliknij <strong>Wydatki.cmd</strong> (potrzebny Node 22).
         </p>
         <DownloadButton url={downloadUrl} />
       </article>
